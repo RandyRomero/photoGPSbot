@@ -53,8 +53,8 @@ def read_exif(image):
     answer = []
     tags = exifread.process_file(image, details=False)
     if len(tags.keys()) < 1:
-        print('The is no EXIF in this file.')
-        exit()
+        answer.append('The is no EXIF in this file.')
+        return answer
 
     try:
         raw_coordinates = [tags['GPS GPSLatitudeRef'],
