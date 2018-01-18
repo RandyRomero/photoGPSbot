@@ -22,7 +22,7 @@ bot = telebot.TeleBot(config.token)
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
-def repeat_all_messages(message):
+def answer_text_message(message):
     # Function that echos all users messages
     text = ('Я не умею разговаривать, но, если ты пришлёшь мне фотографию, я отправлю тебе карту с указанием, где эта '
             'фотография была сделана.')
@@ -32,6 +32,17 @@ def repeat_all_messages(message):
                                                             message.from_user.first_name,
                                                             message.from_user.username,
                                                             message.from_user.last_name))
+
+
+@bot.message_handler(content_types=['photo'])
+def answer_photo_message(message):
+    text = ('Прости, но фотографию нужно отправлять, как файл. Если отправлять её просто как фото, то серверы Telegram'
+            ' сожмут её и выбросят данные о местоположении, и я не смогу тебе его прислать.')
+    bot.send_message(message.chat.id, text)
+    print('{}: user {} a.k.a. {} sent photo as a photo.'.format(datetime.fromtimestamp(message.date),
+                                                                message.from_user.first_name,
+                                                                message.from_user.username,
+                                                                message.from_user.last_name))
 
 
 def exif_to_dd(value):
@@ -60,7 +71,8 @@ def read_exif(image):
     answer = []
     tags = exifread.process_file(image, details=False)
     if len(tags.keys()) < 1:
-        answer.append('The is no EXIF in this file.')
+        answer.append('В этой фотографии нет данных о местоположении.')
+        print('This picture doesn\'t contain EXIF.')
         return answer
 
     try:
@@ -76,8 +88,8 @@ def read_exif(image):
 
     except KeyError:
         answer.append(False)
-        answer.append('Это фотография не имеет GPS-данных. Попробуй другую')
-        print('This picture doesn\'t contain GPS coordinates.')
+        answer.append('Это фотография не имеет GPS-данных. Попробуй другую.')
+        print('This picture doesn\'t contain coordinates.')
         return answer
 
 
