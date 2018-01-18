@@ -12,10 +12,12 @@ import telebot
 import exifread
 import requests
 from io import BytesIO
+from datetime import datetime
+import handle_logs
+from pprint import pprint
 
-# TeleBot encapsulates all API calls in a single class. It provides functions 
-# such as # send_xyz (send_message, send_document etc.) and several ways to 
-# listen for incoming messages.
+logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
+
 bot = telebot.TeleBot(config.token)
 
 
@@ -23,8 +25,13 @@ bot = telebot.TeleBot(config.token)
 def repeat_all_messages(message):
     # Function that echos all users messages
     text = ('Я не умею разговаривать, но, если ты пришлёшь мне фотографию, я отправлю тебе карту с указанием, где эта '
-            'фотогграфия была сделана.')
+            'фотография была сделана.')
     bot.send_message(message.chat.id, text)
+
+    print('{}: user {} a.k.a. {} sent text message.'.format(datetime.fromtimestamp(message.date),
+                                                            message.from_user.first_name,
+                                                            message.from_user.username,
+                                                            message.from_user.last_name))
 
 
 def exif_to_dd(value):
@@ -76,6 +83,10 @@ def read_exif(image):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
+    print('{}: user {} a.k.a. {} sent photo as a file.'.format(datetime.fromtimestamp(message.date),
+                                                               message.from_user.first_name,
+                                                               message.from_user.username,
+                                                               message.from_user.last_name))
     # get image
     file_id = bot.get_file(message.document.file_id)
     # Get temporary link to photo that user has sent to bot
