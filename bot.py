@@ -13,10 +13,10 @@ import exifread
 import requests
 from io import BytesIO
 from datetime import datetime
-import handle_logs
+# import handle_logs
 from pprint import pprint
 
-logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
+# logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
 
 bot = telebot.TeleBot(config.token)
 
@@ -71,6 +71,7 @@ def read_exif(image):
     answer = []
     tags = exifread.process_file(image, details=False)
     if len(tags.keys()) < 1:
+        answer.append(False)
         answer.append('В этой фотографии нет данных о местоположении.')
         print('This picture doesn\'t contain EXIF.')
         return answer
@@ -113,6 +114,7 @@ def handle_image(message):
         # Sent info back to user
         lat, lon = answer[1], answer[2]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
+        print('Success')
     else:
         bot.send_message(message.chat.id, answer[1])
 
