@@ -53,6 +53,7 @@ def exif_to_dd(value):
     lon_ref = str(value[2])
     lon = value[3]
 
+    # TODO Save exif of photo if coverter catch an error trying to convert gps data
     def idf_tag_to_coordinate(tag):
         # convert ifdtag from exifread module to decimal degree format of coordinate
         tag = str(tag).replace('[', '').replace(']', '').split(',')
