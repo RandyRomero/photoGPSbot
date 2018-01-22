@@ -118,6 +118,9 @@ def handle_image(message):
     else:
         bot.send_message(message.chat.id, answer[1])
 
-
-if __name__ == '__main__':  # Keep bot receiving messages
-    bot.polling(none_stop=True)
+while True:
+    try:
+        if __name__ == '__main__':
+            bot.polling(none_stop=True)  # Keep bot receiving messages
+    except:
+        pass
