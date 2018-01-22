@@ -5,8 +5,6 @@
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/map_returning_bot
 
-# TODO Make answers of bot depend on language of user
-
 import config
 import telebot
 import exifread
@@ -45,15 +43,22 @@ def answer_photo_message(message):
                                                                 message.from_user.last_name))
 
 
-def exif_to_dd(value):
+def exif_to_dd(data, message):
     # Convert exif gps to format that accepts Telegram (and Google Maps for example)
 
-    lat_ref = str(value[0])
-    lat = value[1]
-    lon_ref = str(value[2])
-    lon = value[3]
+    try:
+        # lat, lon = exif_to_dd(raw_coordinates)
+        lat_ref = str(data['GPS GPSLatitudeRef'])
+        lat = data['GPS GPSLatitude']
+        lon_ref = str(data['GPS GPSLongitudeRef'])
+        lon = data['GPS GPSLongitude']
+    except KeyError:
+        message.append(False)
+        message.append('Это фотография не имеет GPS-данных. Попробуй другую.')
+        print('This picture doesn\'t contain coordinates.')
+        return message
+        # TODO Save exif of photo if coverter catch an error trying to convert gps data
 
-    # TODO Save exif of photo if coverter catch an error trying to convert gps data
     def idf_tag_to_coordinate(tag):
         # convert ifdtag from exifread module to decimal degree format of coordinate
         tag = str(tag).replace('[', '').replace(']', '').split(',')
@@ -64,35 +69,44 @@ def exif_to_dd(value):
     lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
     lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
 
-    return lat, lon
+    message.append(True)
+    message.extend([lat, lon])
+    return message
 
 
 def read_exif(image):
 
     answer = []
-    tags = exifread.process_file(image, details=False)
-    if len(tags.keys()) < 1:
+    exif = exifread.process_file(image, details=False)
+    if len(exif.keys()) < 1:
         answer.append(False)
-        answer.append('В этой фотографии нет данных о местоположении.')
+        answer.append('В этой фотографии нет EXIF-данных.')
         print('This picture doesn\'t contain EXIF.')
         return answer
 
-    try:
-        raw_coordinates = [tags['GPS GPSLatitudeRef'],
-                           tags['GPS GPSLatitude'],
-                           tags['GPS GPSLongitudeRef'],
-                           tags['GPS GPSLongitude']]
+    answer = exif_to_dd(exif, answer)
 
-        answer.append(True)
-        lat, lon = exif_to_dd(raw_coordinates)
-        answer.extend([lat, lon])
-        return answer
+    # Get necessary tags from EXIF data
 
-    except KeyError:
-        answer.append(False)
-        answer.append('Это фотография не имеет GPS-данных. Попробуй другую.')
-        print('This picture doesn\'t contain coordinates.')
-        return answer
+    date_time = exif.get('EXIF DateTimeOriginal', None)
+    camera_brand = exif.get('Image Make', None)
+    camera_model = exif.get('Image Model', None)
+    lens_brand = exif.get('EXIF LensMake', None)
+    lens_model = exif.get('EXIF LensModel', None)
+
+    date_time_str = 'Дата съёмки: ' + str(date_time) + '\n' if date_time is not None else None
+    camera_brand_str = 'Марка камеры: ' + str(camera_brand) + '\n' if camera_brand is not None else None
+    camera_model_str = 'Модель камеры: ' + str(camera_model) + '\n' if camera_model is not None else None
+    lens_brand_str = 'Марка объектива: ' + str(lens_brand) + '\n' if lens_brand is not None else None
+    lens_model_str = 'Модель объектива: ' + str(lens_model) + '\n' if lens_model is not None else None
+
+    info_about_shot = ''
+    for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model]:
+        if item is not None:
+            info_about_shot += item
+
+    answer.append(info_about_shot)
+    return answer
 
 
 @bot.message_handler(content_types=['document'])  # receive file
@@ -115,13 +129,15 @@ def handle_image(message):
         # Sent info back to user
         lat, lon = answer[1], answer[2]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
+        bot.send_message(message.chat.id, text=answer[3])
         print('Success')
     else:
         bot.send_message(message.chat.id, answer[1])
+
 
 while True:
     try:
         if __name__ == '__main__':
             bot.polling(none_stop=True)  # Keep bot receiving messages
-    except:
+    except TypeError:  # I hope it is the right exception
         pass
