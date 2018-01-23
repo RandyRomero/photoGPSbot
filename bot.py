@@ -45,7 +45,7 @@ def answer_photo_message(message):
     logConsole.info(log_message)
 
 
-def exif_to_dd(data, message):
+def exif_to_dd(data):
     # Convert exif gps to format that accepts Telegram (and Google Maps for example)
 
     try:
@@ -55,13 +55,11 @@ def exif_to_dd(data, message):
         lon_ref = str(data['GPS GPSLongitudeRef'])
         lon = data['GPS GPSLongitude']
     except KeyError:
-        message.append(False)
-        message.append('Это фотография не имеет GPS-данных. Попробуй другую.')
         logFile.info('This picture doesn\'t contain coordinates.')
         logConsole.info('This picture doesn\'t contain coordinates.')
 
-        return message
-        # TODO Save exif of photo if coverter catch an error trying to convert gps data
+        return ['Это фотография не имеет GPS-данных. Попробуй другую.']
+        # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     def idf_tag_to_coordinate(tag):
         # convert ifdtag from exifread module to decimal degree format of coordinate
@@ -73,9 +71,7 @@ def exif_to_dd(data, message):
     lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
     lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
 
-    message.append(True)
-    message.extend([lat, lon])
-    return message
+    return [lat, lon]
 
 
 def read_exif(image):
@@ -89,7 +85,7 @@ def read_exif(image):
         logConsole.info('This picture doesn\'t contain EXIF.')
         return answer
 
-    answer = exif_to_dd(exif, answer)
+    answer.extend(exif_to_dd(exif))
 
     # Get necessary tags from EXIF data
 
@@ -106,7 +102,7 @@ def read_exif(image):
     lens_model_str = 'Модель объектива: ' + str(lens_model) + '\n' if lens_model is not None else None
 
     info_about_shot = ''
-    for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model]:
+    for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model_str]:
         if item is not None:
             info_about_shot += item
 
@@ -134,15 +130,15 @@ def handle_image(message):
 
     # Get coordinates
     answer = read_exif(user_file)
-    if answer[0]:
+    if len(answer) == 3:
         # Sent info back to user
-        lat, lon = answer[1], answer[2]
+        lat, lon = answer[0], answer[1]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
-        bot.send_message(message.chat.id, text=answer[3])
+        bot.send_message(message.chat.id, text=answer[2])
         logFile.info('Success')
         logConsole.info('Success')
     else:
-        bot.send_message(message.chat.id, answer[1])
+        bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
 
 
 while True:
@@ -150,4 +146,5 @@ while True:
         if __name__ == '__main__':
             bot.polling(none_stop=True)  # Keep bot receiving messages
     except TypeError:  # I hope it is the right exception
-        pass
+        logFile.error('Freaking polling!')
+        logConsole.error('Freaking polling!')
