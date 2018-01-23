@@ -24,11 +24,12 @@ def answer_text_message(message):
     text = ('Я не умею разговаривать, но, если ты пришлёшь мне фотографию, я отправлю тебе карту с указанием, где эта '
             'фотография была сделана.')
     bot.send_message(message.chat.id, text)
-
-    print('{}: user {} a.k.a. {} sent text message.'.format(datetime.fromtimestamp(message.date),
-                                                            message.from_user.first_name,
-                                                            message.from_user.username,
-                                                            message.from_user.last_name))
+    log_msg = ('{}: user {} a.k.a. {} sent text message.'.format(datetime.fromtimestamp(message.date),
+                                                                 message.from_user.first_name,
+                                                                 message.from_user.username,
+                                                                 message.from_user.last_name))
+    logFile.info(log_msg)
+    logConsole.info(log_msg)
 
 
 @bot.message_handler(content_types=['photo'])
@@ -36,10 +37,12 @@ def answer_photo_message(message):
     text = ('Прости, но фотографию нужно отправлять, как файл. Если отправлять её просто как фото, то серверы Telegram'
             ' сожмут её и выбросят данные о местоположении, и я не смогу тебе его прислать.')
     bot.send_message(message.chat.id, text)
-    print('{}: user {} a.k.a. {} sent photo as a photo.'.format(datetime.fromtimestamp(message.date),
-                                                                message.from_user.first_name,
-                                                                message.from_user.username,
-                                                                message.from_user.last_name))
+    log_message = ('{}: user {} a.k.a. {} sent photo as a photo.'.format(datetime.fromtimestamp(message.date),
+                                                                         message.from_user.first_name,
+                                                                         message.from_user.username,
+                                                                         message.from_user.last_name))
+    logFile.info(log_message)
+    logConsole.info(log_message)
 
 
 def exif_to_dd(data, message):
@@ -54,7 +57,9 @@ def exif_to_dd(data, message):
     except KeyError:
         message.append(False)
         message.append('Это фотография не имеет GPS-данных. Попробуй другую.')
-        print('This picture doesn\'t contain coordinates.')
+        logFile.info('This picture doesn\'t contain coordinates.')
+        logConsole.info('This picture doesn\'t contain coordinates.')
+
         return message
         # TODO Save exif of photo if coverter catch an error trying to convert gps data
 
@@ -80,7 +85,8 @@ def read_exif(image):
     if len(exif.keys()) < 1:
         answer.append(False)
         answer.append('В этой фотографии нет EXIF-данных.')
-        print('This picture doesn\'t contain EXIF.')
+        logFile.info('This picture doesn\'t contain EXIF.')
+        logConsole.info('This picture doesn\'t contain EXIF.')
         return answer
 
     answer = exif_to_dd(exif, answer)
@@ -110,10 +116,14 @@ def read_exif(image):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
-    print('{}: user {} a.k.a. {} sent photo as a file.'.format(datetime.fromtimestamp(message.date),
-                                                               message.from_user.first_name,
-                                                               message.from_user.username,
-                                                               message.from_user.last_name))
+    log_msg = ('{}: user {} a.k.a. {} sent photo as a file.'.format(datetime.fromtimestamp(message.date),
+                                                                    message.from_user.first_name,
+                                                                    message.from_user.username,
+                                                                    message.from_user.last_name))
+
+    logFile.info(log_msg)
+    logConsole.info(log_msg)
+
     # get image
     file_id = bot.get_file(message.document.file_id)
     # Get temporary link to photo that user has sent to bot
@@ -129,7 +139,8 @@ def handle_image(message):
         lat, lon = answer[1], answer[2]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
         bot.send_message(message.chat.id, text=answer[3])
-        print('Success')
+        logFile.info('Success')
+        logConsole.info('Success')
     else:
         bot.send_message(message.chat.id, answer[1])
 
