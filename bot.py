@@ -11,10 +11,9 @@ import exifread
 import requests
 from io import BytesIO
 from datetime import datetime
-# import handle_logs
-from pprint import pprint
+import handle_logs
 
-# logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
+logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
 
 bot = telebot.TeleBot(config.token)
 

@@ -44,7 +44,7 @@ def set_loggers():
     timestr = time.strftime('%Y-%m-%d__%Hh%Mm')
     new_log_name = os.path.join('log', 'log_' + timestr + '.txt')
 
-    if os.path.exists('.\log'):  # create new log every time when script starts instead of writing in the same file
+    if os.path.exists('log'):  # create new log every time when script starts instead of writing in the same file
         if os.path.exists(new_log_name): # if log file with this date already exists, make new one with (i) in the name
             i = 2
             while os.path.exists(os.path.join('log', 'log_' + timestr + '(' + str(i) + ').txt')):
@@ -55,7 +55,7 @@ def set_loggers():
         else:
             file_handler = logging.FileHandler(new_log_name, encoding='utf8')
     else:
-        os.mkdir('.\log')
+        os.mkdir('log')
         file_handler = logging.FileHandler(new_log_name, encoding='utf8')
 
     # set format to both handlers
