@@ -7,40 +7,59 @@
 
 import config
 import telebot
+from telebot import types
 import exifread
 import requests
 from io import BytesIO
 from datetime import datetime
 import handle_logs
+import language_pack
 
 logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
-
 bot = telebot.TeleBot(config.token)
+lang = language_pack.language_ru
+
+
+@bot.message_handler(commands=['language', 'start'])
+def choose_language(message):
+    keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    rus = types.KeyboardButton(text='Русский')
+    en = types.KeyboardButton(text='English')
+    keyboard.add(rus, en)
+    bot.send_message(message.chat.id, text='Выбери язык / Choose language', reply_markup=keyboard)
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
 def answer_text_message(message):
-    # Function that echos all users messages
-    text = ('Я не умею разговаривать, но, если ты пришлёшь мне фотографию, я отправлю тебе карту с указанием, где эта '
-            'фотография была сделана.')
-    bot.send_message(message.chat.id, text)
-    log_msg = ('{}: user {} a.k.a. {} sent text message.'.format(datetime.fromtimestamp(message.date),
-                                                                 message.from_user.first_name,
-                                                                 message.from_user.username,
-                                                                 message.from_user.last_name))
-    logFile.info(log_msg)
-    logConsole.info(log_msg)
+    global lang
+    keyboard_hider = telebot.types.ReplyKeyboardRemove()
+    if message.text == 'Русский':
+        lang = language_pack.language_ru
+        bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
+    elif message.text == 'English':
+        lang = language_pack.language_en
+        bot.send_message(message.chat.id, text='You chose English.', reply_markup=keyboard_hider)
+
+    else:
+        # Function that echos all users messages
+        bot.send_message(message.chat.id, lang['dont_speak'])
+        log_msg = ('Name: {} last name: {} nickname: {} id: {} sent text message.'.format(message.from_user.first_name,
+                                                                                         message.from_user.last_name,
+                                                                                         message.from_user.username,
+                                                                                         message.from_user.id))
+        logFile.info(log_msg)
+        logConsole.info(log_msg)
 
 
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
-    text = ('Прости, но фотографию нужно отправлять, как файл. Если отправлять её просто как фото, то серверы Telegram'
-            ' сожмут её и выбросят данные о местоположении, и я не смогу тебе его прислать.')
-    bot.send_message(message.chat.id, text)
-    log_message = ('{}: user {} a.k.a. {} sent photo as a photo.'.format(datetime.fromtimestamp(message.date),
-                                                                         message.from_user.first_name,
-                                                                         message.from_user.username,
-                                                                         message.from_user.last_name))
+    bot.send_message(message.chat.id, lang['as_file'])
+    log_message = ('Name: {} last name: {} nickname: {} id: {} sent '
+                   'photo as a photo.'.format(message.from_user.first_name,
+                                              message.from_user.last_name,
+                                              message.from_user.username,
+                                              message.from_user.id))
+
     logFile.info(log_message)
     logConsole.info(log_message)
 
@@ -58,7 +77,7 @@ def exif_to_dd(data):
         logFile.info('This picture doesn\'t contain coordinates.')
         logConsole.info('This picture doesn\'t contain coordinates.')
 
-        return ['Это фотография не имеет GPS-данных. Попробуй другую.']
+        return lang['no_gps']
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     def idf_tag_to_coordinate(tag):
@@ -79,11 +98,9 @@ def read_exif(image):
     answer = []
     exif = exifread.process_file(image, details=False)
     if len(exif.keys()) < 1:
-        answer.append(False)
-        answer.append('В этой фотографии нет EXIF-данных.')
         logFile.info('This picture doesn\'t contain EXIF.')
         logConsole.info('This picture doesn\'t contain EXIF.')
-        return answer
+        return False
 
     answer.extend(exif_to_dd(exif))
 
@@ -95,11 +112,11 @@ def read_exif(image):
     lens_brand = exif.get('EXIF LensMake', None)
     lens_model = exif.get('EXIF LensModel', None)
 
-    date_time_str = 'Дата съёмки: ' + str(date_time) + '\n' if date_time is not None else None
-    camera_brand_str = 'Марка камеры: ' + str(camera_brand) + '\n' if camera_brand is not None else None
-    camera_model_str = 'Модель камеры: ' + str(camera_model) + '\n' if camera_model is not None else None
-    lens_brand_str = 'Марка объектива: ' + str(lens_brand) + '\n' if lens_brand is not None else None
-    lens_model_str = 'Модель объектива: ' + str(lens_model) + '\n' if lens_model is not None else None
+    date_time_str = lang['camera_info'][0] + ' : ' + str(date_time) + '\n' if date_time is not None else None
+    camera_brand_str = lang['camera_info'][1] + ' : ' + str(camera_brand) + '\n' if camera_brand is not None else None
+    camera_model_str = lang['camera_info'][2] + ' : ' + str(camera_model) + '\n' if camera_model is not None else None
+    lens_brand_str = lang['camera_info'][3] + ' : ' + str(lens_brand) + '\n' if lens_brand is not None else None
+    lens_model_str = lang['camera_info'][4] + ' : ' + str(lens_model) + '\n' if lens_model is not None else None
 
     info_about_shot = ''
     for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model_str]:
@@ -112,10 +129,10 @@ def read_exif(image):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
-    log_msg = ('{}: user {} a.k.a. {} sent photo as a file.'.format(datetime.fromtimestamp(message.date),
-                                                                    message.from_user.first_name,
-                                                                    message.from_user.username,
-                                                                    message.from_user.last_name))
+    log_msg = ('Name: {} last name: {} nickname: {} id: {} sent photo as a file.'.format(message.from_user.first_name,
+                                                                                        message.from_user.last_name,
+                                                                                        message.from_user.username,
+                                                                                        message.from_user.id))
 
     logFile.info(log_msg)
     logConsole.info(log_msg)
@@ -130,7 +147,9 @@ def handle_image(message):
 
     # Get coordinates
     answer = read_exif(user_file)
-    if len(answer) == 3:
+    if not answer:
+        bot.send_message(message.chat.id, lang['no_exif'])
+    elif len(answer) == 3:
         # Sent info back to user
         lat, lon = answer[0], answer[1]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
@@ -141,10 +160,18 @@ def handle_image(message):
         bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
 
 
+error_counter = 0
 while True:
+    if error_counter == 30:
+        logConsole.error('Emergency stop due to loop of polling exceptions')
+        exit()
     try:
         if __name__ == '__main__':
             bot.polling(none_stop=True)  # Keep bot receiving messages
-    except TypeError:  # I hope it is the right exception
+    except:
         logFile.error('Freaking polling!')
         logConsole.error('Freaking polling!')
+        error_counter += 1
+
+# if __name__ == '__main__':
+#     bot.polling(none_stop=True)  # Keep bot receiving messages
