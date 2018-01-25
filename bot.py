@@ -77,7 +77,7 @@ def exif_to_dd(data):
         logFile.info('This picture doesn\'t contain coordinates.')
         logConsole.info('This picture doesn\'t contain coordinates.')
 
-        return lang['no_gps']
+        return [lang['no_gps']]
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     def idf_tag_to_coordinate(tag):
@@ -112,11 +112,11 @@ def read_exif(image):
     lens_brand = exif.get('EXIF LensMake', None)
     lens_model = exif.get('EXIF LensModel', None)
 
-    date_time_str = lang['camera_info'][0] + ' : ' + str(date_time) + '\n' if date_time is not None else None
-    camera_brand_str = lang['camera_info'][1] + ' : ' + str(camera_brand) + '\n' if camera_brand is not None else None
-    camera_model_str = lang['camera_info'][2] + ' : ' + str(camera_model) + '\n' if camera_model is not None else None
-    lens_brand_str = lang['camera_info'][3] + ' : ' + str(lens_brand) + '\n' if lens_brand is not None else None
-    lens_model_str = lang['camera_info'][4] + ' : ' + str(lens_model) + '\n' if lens_model is not None else None
+    date_time_str = lang['camera_info'][0] + ': ' + str(date_time) + '\n' if date_time is not None else None
+    camera_brand_str = lang['camera_info'][1] + ': ' + str(camera_brand) + '\n' if camera_brand is not None else None
+    camera_model_str = lang['camera_info'][2] + ': ' + str(camera_model) + '\n' if camera_model is not None else None
+    lens_brand_str = lang['camera_info'][3] + ': ' + str(lens_brand) + '\n' if lens_brand is not None else None
+    lens_model_str = lang['camera_info'][4] + ': ' + str(lens_model) + '\n' if lens_model is not None else None
 
     info_about_shot = ''
     for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model_str]:
@@ -129,6 +129,7 @@ def read_exif(image):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
+    bot.send_message(message.chat.id, lang['photo_prcs'])
     log_msg = ('Name: {} last name: {} nickname: {} id: {} sent photo as a file.'.format(message.from_user.first_name,
                                                                                         message.from_user.last_name,
                                                                                         message.from_user.username,

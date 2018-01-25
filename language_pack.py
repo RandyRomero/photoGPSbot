@@ -9,15 +9,17 @@ language_ru = {
                 'то Telegram сожмёт её и выбросит данные о местоположении, и я не смогу тебе его прислать.'),
     'no_gps': 'Это фотография не имеет GPS-данных. Попробуй другую.',
     'no_exif': 'В этой фотографии нет EXIF-данных.',
+    'photo_prcs': 'Поймал! Обрабатываю...',
     'camera_info': ['Дата съёмки', 'Марка камеры', 'Марка объектива', 'Модель объектива']
 }
 
 language_en = {
     'dont_speak': ('I cannot speak, but if you send me a photo (as a file), I will send you back the location'
-                   ' where it was taken, time of shot and camera info'),
+                   ' where it was taken, time of shooting and camera info.'),
     'as_file': ('Sorry, but it would be better if you send your photo as a file. If you send it just as a photo, '
                 'Telegram will get rid of location and data in order to compress the photo.'),
-    'no_gps': 'This photo does not have info about location. Thry another one.',
-    'no_exif': 'This photo does not contain any data',
+    'no_gps': 'This photo does not have info about location. Try another one.',
+    'no_exif': 'This photo does not contain any data. Maybe you have another one?',
+    'photo_prcs': 'Wait a sec... *sounds of heavy machinery*',
     'camera_info': ['Date', 'Camera brand', 'Camera model', 'Lens brand', 'Lens model']
 }
