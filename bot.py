@@ -43,7 +43,7 @@ def answer_text_message(message):
     else:
         # Function that echos all users messages
         bot.send_message(message.chat.id, lang['dont_speak'])
-        log_msg = ('Name: {} last name: {} nickname: {} id: {} sent text message.'.format(message.from_user.first_name,
+        log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
                                                                                          message.from_user.last_name,
                                                                                          message.from_user.username,
                                                                                          message.from_user.id))
@@ -54,7 +54,7 @@ def answer_text_message(message):
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
     bot.send_message(message.chat.id, lang['as_file'])
-    log_message = ('Name: {} last name: {} nickname: {} id: {} sent '
+    log_message = ('Name: {} Last name: {} Nickname: {} ID: {} sent '
                    'photo as a photo.'.format(message.from_user.first_name,
                                               message.from_user.last_name,
                                               message.from_user.username,
@@ -81,15 +81,23 @@ def exif_to_dd(data):
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     def idf_tag_to_coordinate(tag):
-        # convert ifdtag from exifread module to decimal degree format of coordinate
-        tag = str(tag).replace('[', '').replace(']', '').split(',')
-        tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
-        return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
+        try:
+            # convert ifdtag from exifread module to decimal degree format of coordinate
+            tag = str(tag).replace('[', '').replace(']', '').split(',')
+            tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
+            return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
+        except TypeError:
+            # Save GPS data which led to error
+            logFile.info('GPS-Converter has crushed. Saving gps data from the photo to logs...')
+            logFile.info('Latitude reference: ' + lat_ref)
+            logFile.info('Latitude: ' + lat)
+            logFile.info('Longitude reference: ' + lon_ref)
+            logFile.info('Longitude: ' + lon)
+            logConsole.error('GPS-Converter has crushed.')
 
     # Return positive ir negative longitude/latitude from exifread's ifdtag
     lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
     lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
-
     return [lat, lon]
 
 
@@ -112,6 +120,9 @@ def read_exif(image):
     lens_brand = exif.get('EXIF LensMake', None)
     lens_model = exif.get('EXIF LensModel', None)
 
+    if not any([date_time, camera_brand, camera_model, lens_brand, lens_model]):
+        return False  # Means that there is actually no any date of our interest
+
     date_time_str = lang['camera_info'][0] + ': ' + str(date_time) + '\n' if date_time is not None else None
     camera_brand_str = lang['camera_info'][1] + ': ' + str(camera_brand) + '\n' if camera_brand is not None else None
     camera_model_str = lang['camera_info'][2] + ': ' + str(camera_model) + '\n' if camera_model is not None else None
@@ -130,10 +141,10 @@ def read_exif(image):
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
     bot.send_message(message.chat.id, lang['photo_prcs'])
-    log_msg = ('Name: {} last name: {} nickname: {} id: {} sent photo as a file.'.format(message.from_user.first_name,
-                                                                                        message.from_user.last_name,
-                                                                                        message.from_user.username,
-                                                                                        message.from_user.id))
+    log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(message.from_user.first_name,
+                                                                                         message.from_user.last_name,
+                                                                                         message.from_user.username,
+                                                                                         message.from_user.id))
 
     logFile.info(log_msg)
     logConsole.info(log_msg)
