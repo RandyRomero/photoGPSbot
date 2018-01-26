@@ -14,6 +14,7 @@ from io import BytesIO
 from datetime import datetime
 import handle_logs
 import language_pack
+import db_connector
 
 logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
 bot = telebot.TeleBot(config.token)
@@ -44,9 +45,9 @@ def answer_text_message(message):
         # Function that echos all users messages
         bot.send_message(message.chat.id, lang['dont_speak'])
         log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
-                                                                                         message.from_user.last_name,
-                                                                                         message.from_user.username,
-                                                                                         message.from_user.id))
+                                                                                          message.from_user.last_name,
+                                                                                          message.from_user.username,
+                                                                                          message.from_user.id))
         logFile.info(log_msg)
         logConsole.info(log_msg)
 
@@ -101,6 +102,22 @@ def exif_to_dd(data):
     return [lat, lon]
 
 
+# Save camera info to database to collect statistics
+def save_camera_info(cb, cm, lb, lm):
+    db = db_connector.connect()
+    if not db:
+        logFile.warning('Can\'t connect to db.')
+        logConsole.warning('Can\'t connect to db.')
+        return
+    cursor = db.cursor()
+
+    for data in (cb, cm, lb, lm):
+        query = 'SELECT id FROM statistics WHERE camera_brand = "{}"'.format(data)
+        row = cursor.execute(query)
+        if row:
+            pass
+
+
 def read_exif(image):
 
     answer = []
@@ -128,6 +145,9 @@ def read_exif(image):
     camera_model_str = lang['camera_info'][2] + ': ' + str(camera_model) + '\n' if camera_model is not None else None
     lens_brand_str = lang['camera_info'][3] + ': ' + str(lens_brand) + '\n' if lens_brand is not None else None
     lens_model_str = lang['camera_info'][4] + ': ' + str(lens_model) + '\n' if lens_model is not None else None
+
+    # Haven't done it yet completely
+    # save_camera_info(camera_brand_str, camera_model_str, lens_brand_str, lens_model_str)
 
     info_about_shot = ''
     for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model_str]:
