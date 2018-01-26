@@ -81,25 +81,35 @@ def exif_to_dd(data):
         return [lang['no_gps']]
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
+    # convert ifdtag from exifread module to decimal degree format of coordinate
     def idf_tag_to_coordinate(tag):
-        try:
-            # convert ifdtag from exifread module to decimal degree format of coordinate
-            tag = str(tag).replace('[', '').replace(']', '').split(',')
+
+        logFile.debug('Latitude reference: ' + lat_ref)
+        logFile.debug('Latitude: ' + str(lat))
+        logFile.debug('Longitude reference: ' + lon_ref)
+        logFile.debug('Longitude: ' + str(lon))
+
+        tag = str(tag).replace('[', '').replace(']', '').split(',')
+        if '/' in tag[2]:
+            # Slit string like '4444/5555' and divide first one by second one
             tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
-            return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
-        except TypeError:
-            # Save GPS data which led to error
-            logFile.info('GPS-Converter has crushed. Saving gps data from the photo to logs...')
-            logFile.info('Latitude reference: ' + lat_ref)
-            logFile.info('Latitude: ' + lat)
-            logFile.info('Longitude reference: ' + lon_ref)
-            logFile.info('Longitude: ' + lon)
-            logConsole.error('GPS-Converter has crushed.')
+        elif not '/' in tag[2]:
+             # Rare case so far - when there is just a number
+            tag[2] = int(tag[2])
+        else:
+            logFile.warning('Can\'t read gps from file!')
+            logConsole.warning('Can\'t read gps from file!')
+            return False
+
+        return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
 
     # Return positive ir negative longitude/latitude from exifread's ifdtag
     lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
     lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
-    return [lat, lon]
+    if lat is False or lon is False:
+        return [lang['bad_gps']]
+    else:
+        return [lat, lon]
 
 
 # Save camera info to database to collect statistics
@@ -192,18 +202,18 @@ def handle_image(message):
         bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
 
 
-error_counter = 0
-while True:
-    if error_counter == 30:
-        logConsole.error('Emergency stop due to loop of polling exceptions')
-        exit()
-    try:
-        if __name__ == '__main__':
-            bot.polling(none_stop=True)  # Keep bot receiving messages
-    except:
-        logFile.error('Freaking polling!')
-        logConsole.error('Freaking polling!')
-        error_counter += 1
+# error_counter = 0
+# while True:
+#     if error_counter == 30:
+#         logConsole.error('Emergency stop due to loop of polling exceptions')
+#         exit()
+#     try:
+#         if __name__ == '__main__':
+#             bot.polling(none_stop=True)  # Keep bot receiving messages
+#     except:
+#         logFile.error('Freaking polling!')
+#         logConsole.error('Freaking polling!')
+#         error_counter += 1
 
-# if __name__ == '__main__':
-#     bot.polling(none_stop=True)  # Keep bot receiving messages
+if __name__ == '__main__':
+    bot.polling(none_stop=True)  # Keep bot receiving messages
