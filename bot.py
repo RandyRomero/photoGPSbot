@@ -11,6 +11,7 @@ from telebot import types
 import exifread
 import requests
 from io import BytesIO
+import traceback
 from datetime import datetime
 import handle_logs
 import language_pack
@@ -93,8 +94,8 @@ def exif_to_dd(data):
         if '/' in tag[2]:
             # Slit string like '4444/5555' and divide first one by second one
             tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
-        elif not '/' in tag[2]:
-             # Rare case so far - when there is just a number
+        elif '/' not in tag[2]:
+            # Rare case so far - when there is just a number
             tag[2] = int(tag[2])
         else:
             logFile.warning('Can\'t read gps from file!')
@@ -215,5 +216,15 @@ def handle_image(message):
 #         logConsole.error('Freaking polling!')
 #         error_counter += 1
 
+def telegram_polling():
+    try:
+        bot.polling(none_stop=True, timeout=60)  # Keep bot receiving messages
+    except:
+        logFile.warning('Polling issue\n' + traceback.format_exc())
+        logConsole.warning('Polling issue\n' + traceback.format_exc())
+        bot.stop_polling()
+        telegram_polling()
+
+
 if __name__ == '__main__':
-    bot.polling(none_stop=True)  # Keep bot receiving messages
+    telegram_polling()
