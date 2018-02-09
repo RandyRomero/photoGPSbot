@@ -16,6 +16,7 @@ from datetime import datetime
 import handle_logs
 import language_pack
 import db_connector
+import MySQLdb
 
 logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
 bot = telebot.TeleBot(config.token)
@@ -114,7 +115,12 @@ def exif_to_dd(data):
 
 
 # Save camera info to database to collect statistics
-def save_camera_info(cb, cm, lb, lm):
+def save_camera_info(data):
+
+    tables = ['camera_brand_stat', 'camera_model_stat', 'lens_brand_stat', 'lens_model_stat']
+    columns = ['camera_brand', 'camera_model', 'lens_brand', 'lens_model']
+
+    # connect to db
     db = db_connector.connect()
     if not db:
         logFile.warning('Can\'t connect to db.')
@@ -122,11 +128,43 @@ def save_camera_info(cb, cm, lb, lm):
         return
     cursor = db.cursor()
 
-    for data in (cb, cm, lb, lm):
-        query = 'SELECT id FROM statistics WHERE camera_brand = "{}"'.format(data)
-        row = cursor.execute(query)
-        if row:
-            pass
+    for name, table, column in zip(data, tables, columns):
+        logConsole.debug('Name: {}; Table: {}; Column: {}'.format(name, table, column))
+        if name is not None:  # if there was this information inside EXIF of the photo
+            name = str(name).strip()
+            # logConsole.debug('Data: ' + )
+            try:
+                query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, name)
+                row = cursor.execute(query)
+            except (MySQLdb.Error, MySQLdb.Warning) as e:
+                logConsole.error(e)
+                logFile.error(e)
+                return
+            if not row:
+                try:
+                    query = ('INSERT INTO {} ({}, occurrences)'
+                             'VALUES ("{}", 1);'.format(table, column, name))
+                    cursor.execute(query)
+                    db.commit()
+                    logConsole.info('{} was added to {}'.format(name, table))
+                    logFile.info('{} was added to {}'.format(name, table))
+                except (MySQLdb.Error, MySQLdb.Warning) as e:
+                    logConsole.error(e)
+                    logFile.error(e)
+            else:
+                try:
+                    logConsole.debug('There is {} in {} already'.format(name, table))
+                    logFile.debug('There is {} in {} already'.format(name, table))
+                    query = 'UPDATE {} SET occurrences = occurrences + 1 WHERE {}="{}"'.format(table, column, name)
+                    cursor.execute(query)
+                    db.commit()
+                    logConsole.debug('{} in {} was updated'.format(name, table))
+                    logFile.debug('{} in {} was updated'.format(name, table))
+                except (MySQLdb.Error, MySQLdb.Warning) as e:
+                    logConsole.error(e)
+                    logFile.error(e)
+
+    db_connector.disconnect()
 
 
 def read_exif(image):
@@ -149,7 +187,9 @@ def read_exif(image):
     lens_model = exif.get('EXIF LensModel', None)
 
     if not any([date_time, camera_brand, camera_model, lens_brand, lens_model]):
-        return False  # Means that there is actually no any date of our interest
+        return False  # Means that there is actually no any data of our interest
+
+    camera_info = camera_brand, camera_model, lens_brand, lens_model
 
     date_time_str = lang['camera_info'][0] + ': ' + str(date_time) + '\n' if date_time is not None else None
     camera_brand_str = lang['camera_info'][1] + ': ' + str(camera_brand) + '\n' if camera_brand is not None else None
@@ -158,7 +198,7 @@ def read_exif(image):
     lens_model_str = lang['camera_info'][4] + ': ' + str(lens_model) + '\n' if lens_model is not None else None
 
     # Haven't done it yet completely
-    # save_camera_info(camera_brand_str, camera_model_str, lens_brand_str, lens_model_str)
+    # save_camera_info(camera_brand, camera_model, lens_brand, lens_model)
 
     info_about_shot = ''
     for item in [date_time_str, camera_brand_str, camera_model_str, lens_brand_str, lens_model_str]:
@@ -166,7 +206,7 @@ def read_exif(image):
             info_about_shot += item
 
     answer.append(info_about_shot)
-    return answer
+    return answer, camera_info
 
 
 @bot.message_handler(content_types=['document'])  # receive file
@@ -189,7 +229,7 @@ def handle_image(message):
     user_file = BytesIO(r.content)  # Get file-like object of user's photo
 
     # Get coordinates
-    answer = read_exif(user_file)
+    answer, cam_info = read_exif(user_file)
     if not answer:
         bot.send_message(message.chat.id, lang['no_exif'])
     elif len(answer) == 3:
@@ -199,9 +239,10 @@ def handle_image(message):
         bot.send_message(message.chat.id, text=answer[2])
         logFile.info('Success')
         logConsole.info('Success')
+        save_camera_info(cam_info)
     else:
         bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
-
+        save_camera_info(cam_info)
 
 # error_counter = 0
 # while True:

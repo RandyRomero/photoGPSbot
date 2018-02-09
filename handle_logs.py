@@ -36,7 +36,7 @@ def set_loggers():
     log_file.setLevel(logging.INFO)  # set level of messages to be logged to file
 
     log_console = logging.getLogger('fs2')
-    log_console.setLevel(logging.INFO)
+    log_console.setLevel(logging.DEBUG)
 
     # define format of logging messages
     formatter = logging.Formatter('%(levelname)s %(asctime)s line %(lineno)s: %(message)s')
