@@ -2,4 +2,3 @@ config.py
 .idea/
 __pycache__/
 log/
-db_connector.py
