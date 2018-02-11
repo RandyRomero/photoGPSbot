@@ -3,3 +3,4 @@ config.py
 __pycache__/
 log/
 prod.txt
+*.pyc

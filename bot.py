@@ -79,7 +79,6 @@ def exif_to_dd(data):
     except KeyError:
         logFile.info('This picture doesn\'t contain coordinates.')
         logConsole.info('This picture doesn\'t contain coordinates.')
-
         return [lang['no_gps']]
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
@@ -174,7 +173,7 @@ def read_exif(image):
     if len(exif.keys()) < 1:
         logFile.info('This picture doesn\'t contain EXIF.')
         logConsole.info('This picture doesn\'t contain EXIF.')
-        return False
+        return False, False
 
     answer.extend(exif_to_dd(exif))
 
@@ -239,10 +238,12 @@ def handle_image(message):
         bot.send_message(message.chat.id, text=answer[2])
         logFile.info('Success')
         logConsole.info('Success')
-        save_camera_info(cam_info)
+        if cam_info:
+            save_camera_info(cam_info)
     else:
         bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
-        save_camera_info(cam_info)
+        if cam_info:
+            save_camera_info(cam_info)
 
 # error_counter = 0
 # while True:
@@ -257,6 +258,7 @@ def handle_image(message):
 #         logConsole.error('Freaking polling!')
 #         error_counter += 1
 
+
 def telegram_polling():
     try:
         bot.polling(none_stop=True, timeout=60)  # Keep bot receiving messages
@@ -264,7 +266,7 @@ def telegram_polling():
         logFile.warning('Polling issue\n' + traceback.format_exc())
         logConsole.warning('Polling issue\n' + traceback.format_exc())
         bot.stop_polling()
-        telegram_polling()
+        # telegram_polling()
 
 
 if __name__ == '__main__':
