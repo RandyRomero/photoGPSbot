@@ -127,7 +127,9 @@ def save_camera_info(data):
         return
     cursor = db.cursor()
 
+    logConsole.debug('############# debug info about storing exif to db ################')
     for name, table, column in zip(data, tables, columns):
+
         logConsole.debug('Name: {}; Table: {}; Column: {}'.format(name, table, column))
         if name is not None:  # if there was this information inside EXIF of the photo
             name = str(name).strip()
@@ -163,6 +165,7 @@ def save_camera_info(data):
                     logConsole.error(e)
                     logFile.error(e)
 
+    logConsole.debug('############## end of debug info about storing exif to db###############\n')
     db_connector.disconnect()
 
 
@@ -231,19 +234,29 @@ def handle_image(message):
     answer, cam_info = read_exif(user_file)
     if not answer:
         bot.send_message(message.chat.id, lang['no_exif'])
-    elif len(answer) == 3:
-        # Sent info back to user
+    elif len(answer) == 3:  # Sent location and info back to user
         lat, lon = answer[0], answer[1]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
         bot.send_message(message.chat.id, text=answer[2])
-        logFile.info('Success')
-        logConsole.info('Success')
-        if cam_info:
-            save_camera_info(cam_info)
+        log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
+                   '{} ID: {}'.format(message.from_user.first_name,
+                                      message.from_user.last_name,
+                                      message.from_user.username,
+                                      message.from_user.id))
+
+        logFile.info(log_msg)
+        logConsole.info(log_msg)
+        save_camera_info(cam_info)
     else:
         bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
-        if cam_info:
-            save_camera_info(cam_info)
+        log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
+                   '{} ID: {}'.format(message.from_user.first_name,
+                                      message.from_user.last_name,
+                                      message.from_user.username,
+                                      message.from_user.id))
+        logFile.info(log_msg)
+        logConsole.info(log_msg)
+        save_camera_info(cam_info)
 
 # error_counter = 0
 # while True:
