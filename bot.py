@@ -135,6 +135,18 @@ def save_camera_info(data):
             name = str(name).strip()
             # logConsole.debug('Data: ' + )
             try:
+                query = 'SELECT right_tag FROM tag_table WHERE wrong_tag="{}"'.format(name)
+                row = cursor.execute(query)
+                if row:
+                    name = cursor.fetchone()[0]
+                    logConsole.debug('Tag after looking up in tag_tables - {}.'.format(name))
+                    logFile.debug('Tag after looking up in tag_tables - {}.'.format(name))
+
+            except (MySQLdb.Error, MySQLdb.Warning) as e:
+                logConsole.error(e)
+                logFile.error(e)
+
+            try:
                 query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, name)
                 row = cursor.execute(query)
             except (MySQLdb.Error, MySQLdb.Warning) as e:
