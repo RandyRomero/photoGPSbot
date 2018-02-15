@@ -22,9 +22,17 @@ logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
 bot = telebot.TeleBot(config.token)
 lang = language_pack.language_ru
 
+logConsole.info('Starting photoGPSbot...')
+logFile.info('Starting photoGPSbot...')
+
+# TODO Make bot count and show time since it was started
+
 # Official Pythonanywhere crutch to check if bot is already running to restart it if it's not
 if os.path.exists('prod.txt'): # if it is copy if bot on a production server
     import socket
+
+    logConsole.info('Script is running on a production server.')
+    logFile.info('Script is running on a production server.')
 
     # we want to keep the socket open until the very end of
     # our script so we use a global variable to avoid going
@@ -32,9 +40,12 @@ if os.path.exists('prod.txt'): # if it is copy if bot on a production server
     lock_socket = None
 
     def is_lock_free():
+
         global lock_socket
         lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         lock_id = "OloloRodriguez.photoGPSbot"  # this should be unique. your username as a prefix is a convention
+        logConsole.info('Check if bot is already running.')
+        logFile.info('Check if bot is already running.')
         try:
             lock_socket.bind('\0' + lock_id)
             logConsole.info("Acquired lock {}".format(lock_id))
@@ -42,6 +53,9 @@ if os.path.exists('prod.txt'): # if it is copy if bot on a production server
         except socket.error:
             # socket already locked, task must already be running
             logConsole.info("Failed to acquire lock {}".format(lock_id))
+            logFile.info("Failed to acquire lock {}".format(lock_id))
+            logConsole.info('PhotoGPSbot is running already. There is no need to start it over.')
+            logFile.info('PhotoGPSbot is running already. There is no need to start it over.')
             return False
 
     if not is_lock_free():
