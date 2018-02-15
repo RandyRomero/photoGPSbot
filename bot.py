@@ -5,6 +5,7 @@
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/map_returning_bot
 
+import os
 import config
 import telebot
 from telebot import types
@@ -12,7 +13,6 @@ import exifread
 import requests
 from io import BytesIO
 import traceback
-from datetime import datetime
 import handle_logs
 import language_pack
 import db_connector
@@ -21,6 +21,31 @@ import MySQLdb
 logFile, logConsole = handle_logs.set_loggers()  # set up logging via my module
 bot = telebot.TeleBot(config.token)
 lang = language_pack.language_ru
+
+# Official Pythonanywhere crutch to check if bot is already running to restart it if it's not
+if os.path.exists('prod.txt'): # if it is copy if bot on a production server
+    import socket
+
+    # we want to keep the socket open until the very end of
+    # our script so we use a global variable to avoid going
+    # out of scope and being garbage-collected
+    lock_socket = None
+
+    def is_lock_free():
+        global lock_socket
+        lock_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        lock_id = "OloloRodriguez.photoGPSbot"  # this should be unique. your username as a prefix is a convention
+        try:
+            lock_socket.bind('\0' + lock_id)
+            logConsole.info("Acquired lock {}".format(lock_id))
+            return True
+        except socket.error:
+            # socket already locked, task must already be running
+            logConsole.info("Failed to acquire lock {}".format(lock_id))
+            return False
+
+    if not is_lock_free():
+        exit()
 
 
 @bot.message_handler(commands=['language', 'start'])
