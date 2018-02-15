@@ -119,7 +119,7 @@ def save_camera_info(data):
     tables = ['camera_brand_stat', 'camera_model_stat', 'lens_brand_stat', 'lens_model_stat']
     columns = ['camera_brand', 'camera_model', 'lens_brand', 'lens_model']
 
-    # connect to db
+    # Connect to db
     db = db_connector.connect()
     if not db:
         logFile.warning('Can\'t connect to db.')
@@ -128,26 +128,27 @@ def save_camera_info(data):
     cursor = db.cursor()
 
     logConsole.debug('############# debug info about storing exif to db ################')
-    for name, table, column in zip(data, tables, columns):
+    for tag, table, column in zip(data, tables, columns):
 
-        logConsole.debug('Name: {}; Table: {}; Column: {}'.format(name, table, column))
-        if name is not None:  # if there was this information inside EXIF of the photo
-            name = str(name).strip()
-            # logConsole.debug('Data: ' + )
+        logConsole.debug('Name: {}; Table: {}; Column: {} from EXIF'.format(tag, table, column))
+        if tag is not None:  # if there was this information inside EXIF of the photo
+            tag = str(tag).strip()
+
+            # Collate with special table if there more appropriate name for the tag
+            # For example instead of just Nikon there can be NIKON CORPORATION in EXIF
             try:
-                query = 'SELECT right_tag FROM tag_table WHERE wrong_tag="{}"'.format(name)
+                query = 'SELECT right_tag FROM tag_table WHERE wrong_tag="{}"'.format(tag)
                 row = cursor.execute(query)
                 if row:
-                    name = cursor.fetchone()[0]
-                    logConsole.debug('Tag after looking up in tag_tables - {}.'.format(name))
-                    logFile.debug('Tag after looking up in tag_tables - {}.'.format(name))
-
+                    tag = cursor.fetchone()[0]  # Get appropriate tag from the table
+                    logConsole.debug('Tag after looking up in tag_tables - {}.'.format(tag))
+                    logFile.debug('Tag after looking up in tag_tables - {}.'.format(tag))
             except (MySQLdb.Error, MySQLdb.Warning) as e:
                 logConsole.error(e)
                 logFile.error(e)
 
             try:
-                query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, name)
+                query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, tag)
                 row = cursor.execute(query)
             except (MySQLdb.Error, MySQLdb.Warning) as e:
                 logConsole.error(e)
@@ -156,23 +157,23 @@ def save_camera_info(data):
             if not row:
                 try:
                     query = ('INSERT INTO {} ({}, occurrences)'
-                             'VALUES ("{}", 1);'.format(table, column, name))
+                             'VALUES ("{}", 1);'.format(table, column, tag))
                     cursor.execute(query)
                     db.commit()
-                    logConsole.info('{} was added to {}'.format(name, table))
-                    logFile.info('{} was added to {}'.format(name, table))
+                    logConsole.info('{} was added to {}'.format(tag, table))
+                    logFile.info('{} was added to {}'.format(tag, table))
                 except (MySQLdb.Error, MySQLdb.Warning) as e:
                     logConsole.error(e)
                     logFile.error(e)
             else:
                 try:
-                    logConsole.debug('There is {} in {} already'.format(name, table))
-                    logFile.debug('There is {} in {} already'.format(name, table))
-                    query = 'UPDATE {} SET occurrences = occurrences + 1 WHERE {}="{}"'.format(table, column, name)
+                    logConsole.debug('There is {} in {} already'.format(tag, table))
+                    logFile.debug('There is {} in {} already'.format(tag, table))
+                    query = 'UPDATE {} SET occurrences = occurrences + 1 WHERE {}="{}"'.format(table, column, tag)
                     cursor.execute(query)
                     db.commit()
-                    logConsole.debug('{} in {} was updated'.format(name, table))
-                    logFile.debug('{} in {} was updated'.format(name, table))
+                    logConsole.debug('{} in {} was updated'.format(tag, table))
+                    logFile.debug('{} in {} was updated'.format(tag, table))
                 except (MySQLdb.Error, MySQLdb.Warning) as e:
                     logConsole.error(e)
                     logFile.error(e)
