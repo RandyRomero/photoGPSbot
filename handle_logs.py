@@ -4,23 +4,17 @@
 # Written by Aleksandr Mikheev a.k.a Randy Romero
 # https://github.com/RandyRomero
 
-# This is module that sets two loggers for you script
-# lofFile logger - to log into txt file in folder inside root folder of your script
-# logConsole - to log into console
+# This is module that sets logger for your script that log to file and console from all your models.
 
-# In order to use it in you script you need import 'handle_logs'
-# and set loggers inside you script something like this:
-# logFile, logConsole = handle_logs.set_loggers()
-# Then when you want to log something in file you type for example:
-# logFile.debug('You debugging message')
-# or
-# logFile.info('User went crazy!')
+# In order to use it in you script you need import log, clean_log_folder from handle_logs
+# Then when you want to log something you type for example:
+# log.debug('You debugging message') or log.info('User went crazy!')
 
 # This module can also clean up log folder when it is too large
-# Put in your script 'handle_logs.clean_log_folder(size, logFile, logConsole)'
+# In order to do that call clean_log_folder(size)
 # where size is integer that represents maximum size in megabytes that
 # triggers removing the oldest log files
-# and where logFile and logConsole are names of loggers
+
 
 import logging
 import os
@@ -30,22 +24,19 @@ from datetime import datetime
 import re
 
 
-def set_loggers():
-    log_file = logging.getLogger('fs1')  # create logger for this specific module for logging to file
+def set_logger():
+    new_log = logging.getLogger(__name__)  # __name__ needs to add name of corresponding module in log message
+    new_log.setLevel(logging.DEBUG)  # set level of messages to be logged
 
-    log_file.setLevel(logging.INFO)  # set level of messages to be logged to file
+    # Define format of logging messages
+    formatter = logging.Formatter('%(levelname)s %(asctime)s %(module)s line %(lineno)s: %(message)s')
 
-    log_console = logging.getLogger('fs2')
-    log_console.setLevel(logging.DEBUG)
-
-    # define format of logging messages
-    formatter = logging.Formatter('%(levelname)s %(asctime)s line %(lineno)s: %(message)s')
-
+    # Define time format to add to a name of a new log file
     timestr = time.strftime('%Y-%m-%d__%Hh%Mm')
     new_log_name = os.path.join('log', 'log_' + timestr + '.txt')
 
     if os.path.exists('log'):  # create new log every time when script starts instead of writing in the same file
-        if os.path.exists(new_log_name): # if log file with this date already exists, make new one with (i) in the name
+        if os.path.exists(new_log_name):  # if log file with this date already exists, make new one with (i) in the name
             i = 2
             while os.path.exists(os.path.join('log', 'log_' + timestr + '(' + str(i) + ').txt')):
                 i += 1
@@ -63,14 +54,14 @@ def set_loggers():
     stream_handler.setFormatter(formatter)
     file_handler.setFormatter(formatter)
 
-    # apply handler to this module (folderSync.py)
-    log_file.addHandler(file_handler)
-    log_console.addHandler(stream_handler)
+    # apply handler to this module
+    new_log.addHandler(file_handler)
+    new_log.addHandler(stream_handler)
 
-    return log_file, log_console
+    return new_log
 
 
-def clean_log_folder(max_size, log_file, log_console):
+def clean_log_folder(max_size):
     # Remove oldest log files from log folder when size of folder is more than max_size.
 
     # Script take creation time of file not from its properties (get.cwd()),
@@ -95,7 +86,7 @@ def clean_log_folder(max_size, log_file, log_console):
                 logfile_list.append([path_to_logfile, creation_time, size_of_log])
                 total_size += size_of_log
 
-        log_file.info('There is {0:.02f} MB of logs.\n'.format(total_size / 1024**2))
+        log.info('There is {0:.02f} MB of logs.\n'.format(total_size / 1024**2))
         return total_size
 
     total_log_size = check_logs_size()
@@ -111,10 +102,13 @@ def clean_log_folder(max_size, log_file, log_console):
                 oldest = val[1]
                 logfile_to_delete = val[0]
                 index_to_remove = index
-        log_file.info('Removing old log file: ' + logfile_to_delete + ', ' +
-                      str(datetime.fromtimestamp(oldest)))
+        log.info('Removing old log file: ' + logfile_to_delete + ', ' +
+                 str(datetime.fromtimestamp(oldest)))
 
         send2trash.send2trash(logfile_to_delete)
         # remove item from from list and subtract it's size from total size
         total_log_size -= logfile_list[index_to_remove][2]
         logfile_list.pop(index_to_remove)
+
+
+log = set_logger()
