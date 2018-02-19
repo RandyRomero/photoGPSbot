@@ -11,7 +11,7 @@ language_ru = {
     'bad_gps': 'Не могу распознать формат GPS. Напиши @SavageRandy, вдруг починит.',
     'no_exif': 'В этой фотографии нет EXIF-данных.',
     'photo_prcs': 'Поймал! Обрабатываю...',
-    'camera_info': ['Дата съёмки', 'Марка камеры', 'Модель камеры', 'Марка объектива', 'Модель объектива']
+    'camera_info': ['Дата съёмки: ', 'Камера: ', 'Объектив: ']
 }
 
 language_en = {
@@ -23,5 +23,5 @@ language_en = {
     'bad_gps': 'Cannot read GPS from this photo. Maybe @SavageRandy can help you.',
     'no_exif': 'This photo does not contain any data. Maybe you have another one?',
     'photo_prcs': 'Wait a sec... *sounds of heavy machinery*',
-    'camera_info': ['Date', 'Camera brand', 'Camera model', 'Lens brand', 'Lens model']
+    'camera_info': ['Date', 'Camera brand: ', 'Lens brand: ']
 }
