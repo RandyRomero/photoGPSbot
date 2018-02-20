@@ -31,6 +31,12 @@ db = db_connector.connect()
 if not db:
     log.warning('Can\'t connect to db.')
 
+# ping(True) checks whether or not the connection to the server is
+# working. If it has gone down, an automatic reconnection is
+# attempted.
+db.ping(True)
+cursor = db.cursor()
+
 
 @bot.message_handler(commands=['language', 'start'])
 def choose_language(message):
@@ -122,20 +128,14 @@ def exif_to_dd(data):
         return [lat, lon]
 
 
-# Save camera info to database to collect statistics
-def save_camera_info(data):
+def check_camera_tags(tags):
 
-    tables = ['camera_name_table', 'lens_name_table']
-    columns = ['camera_name', 'lens_name']
+    checked_tags = []
 
-    cursor = db.cursor()
-
-    log.debug('############# debug info about storing exif to db ################')
-    for tag, table, column in zip(data, tables, columns):
-
-        log.debug('Name: {}; Table: {}; Column: {} from EXIF'.format(tag, table, column))
+    for tag in tags:
         if tag:  # if there was this information inside EXIF of the photo
             tag = str(tag).strip()
+            log.info('Looking up collation for {}'.format(tag))
 
             # Collate with special table if there more appropriate name for the tag
             # For example instead of just Nikon there can be NIKON CORPORATION in EXIF
@@ -148,12 +148,32 @@ def save_camera_info(data):
             except (MySQLdb.Error, MySQLdb.Warning) as e:
                 log.error(e)
 
-            try:
-                query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, tag)
-                row = cursor.execute(query)
-            except (MySQLdb.Error, MySQLdb.Warning) as e:
-                log.error(e)
-                return
+        checked_tags.append(tag)
+
+    return checked_tags
+
+
+# Save camera info to database to collect statistics
+def save_camera_info(data):
+    global db
+
+    tables = ['camera_name_table', 'lens_name_table']
+    columns = ['camera_name', 'lens_name']
+
+    log.debug('############# debug info about storing exif to db ################')
+    for tag, table, column in zip(data, tables, columns):
+
+        if tag:
+            log.debug('Name: {}; Table: {}; Column: {} from EXIF'.format(tag, table, column))
+            while True:
+                try:
+                    query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, tag)
+                    row = cursor.execute(query)
+                    break
+                except (MySQLdb.Error, MySQLdb.Warning) as e:
+                    log.console(e)
+                    return
+
             if not row:
                 try:
                     query = ('INSERT INTO {} ({}, occurrences)'
@@ -205,12 +225,13 @@ def read_exif(image):
     date_time_str = str(date_time) if date_time is not None else None
     camera = dedupe_string(camera_brand + ' ' + camera_model) if camera_brand + ' ' + camera_model != ' ' else None
     lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
+
+    camera, lens = check_camera_tags([camera, lens])
     camera_info = camera, lens
 
     info_about_shot = ''
     for tag, item in zip(lang['camera_info'], [date_time_str, camera, lens]):
         if item:
-            print()
             info_about_shot += tag + item + '\n'
 
     answer.append(info_about_shot)
