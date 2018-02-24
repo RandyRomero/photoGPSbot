@@ -23,9 +23,6 @@ clean_log_folder(20)
 
 bot = telebot.TeleBot(config.token)
 # TODO Make command to safely turn bot down when necessary (closing ssh and connection to db)
-# TODO Store language choice of each user not in a freaking global variable which is common for everyone, but in db
-# lang = language_pack.language_ru
-# lang[user_lang[chat_id]]
 
 # Connect to db
 db = db_connector.connect()
@@ -41,8 +38,17 @@ cursor = db.cursor()
 user_lang = {}
 
 
-def load_last_user_languages():
+def load_last_user_languages(message):
     pass
+
+
+def set_user_language(chat_id, lang):
+    log.debug('Updating info about user {} language in memory & database...'.format(chat_id))
+    query = 'UPDATE user_lang_table SET lang="{}" WHERE chat_id={}'.format(lang, chat_id)
+    cursor.execute(query)
+    db.commit()
+    user_lang[chat_id] = lang
+    log.info('User {} language was switched to {}'.format(chat_id, lang))
 
 
 def get_user_lang(message):
@@ -60,11 +66,7 @@ def get_user_lang(message):
     if not lang:
         log.debug('There is no entry about user {} language in memory. Looking up in database...'.format(chat_id))
         query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
-        try:
-            row = cursor.execute(query)
-        except (MySQLdb.Error, MySQLdb.Warning) as e:
-                log.error(e)
-                turn_bot_off()
+        row = cursor.execute(query)
         if row:
             lang = cursor.fetchone()[0]
             log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
@@ -77,11 +79,7 @@ def get_user_lang(message):
             lang = 'en-US' if not lang.startswith('ru') or not lang.startswith('en') else lang
             log.debug('User {} default language for bot is set to be {}.'.format(chat_id, lang))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
-            try:
-                cursor.execute(query)
-            except (MySQLdb.Error, MySQLdb.Warning) as e:
-                log.error(e)
-                turn_bot_off()
+            cursor.execute(query)
             db.commit()
             user_lang[chat_id] = lang
             log.debug('Language of user {} is {}. Was stored in memory and database.'.format(chat_id, lang))
@@ -92,8 +90,15 @@ def get_user_lang(message):
     return lang
 
 
-def change_language():
-    pass
+def change_user_language(message):
+    curr_lang = get_user_lang(message)
+    new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
+    log.debug('Changing user {} language from {} to {}...'.format(message.chat.id, curr_lang, new_lang))
+    try:
+        set_user_language(message.chat.id, new_lang)
+        return True
+    except:
+        return False
 
 
 @bot.message_handler(commands=['start'])
@@ -118,21 +123,16 @@ def turn_bot_off(message):
 def answer_text_message(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
     if message.text == 'Русский/English':
-        pass
-        # TODO Make function to change language
+        if change_user_language(message):
+            bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_success'])
+        else:
+            bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_failure'])
+
         # bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
     # elif message.text == 'English':
     #     lang = language_pack.language_en
     #     bot.send_message(message.chat.id, text='You chose English.', reply_markup=keyboard_hider)
-#
-#     else:
-#         # Function that echos all users messages
-#         bot.send_message(message.chat.id, lang['dont_speak'])
-#         log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
-#                                                                                           message.from_user.last_name,
-#                                                                                           message.from_user.username,
-#                                                                                           message.from_user.id))
-#         log.info(log_msg)
+    #
 
 
 @bot.message_handler(content_types=['photo'])

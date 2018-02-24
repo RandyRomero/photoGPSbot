@@ -4,6 +4,8 @@
 lang_msgs = {
     'ru-RU': {
         'menu_header': 'Отправь фото или выбери пункт:',
+        'switch_lang_success': 'Теперь я говорю по-русски!',
+        'switch_lang_failure': 'Не удалось сменить язык. Попробуйте позже.',
         'dont_speak': ('Я не умею разговаривать, но, если ты пришлёшь мне фотографию, '
                        'я отправлю тебе карту с указанием, где эта фотография была сделана, дату съёмки и информацию'
                        'о камере.'),
@@ -18,6 +20,8 @@ lang_msgs = {
 
     'en-US': {
         'menu_header': 'Send photo or choose of one options below',
+        'switch_lang_success': 'Now I\'m speaking English.',
+        'switch_lang_failure': 'I can\'t change language. Try again later.',
         'dont_speak': ('I cannot speak, but if you send me a photo (as a file), I will send you back the location'
                        ' where it was taken, time of shooting and camera info.'),
         'as_file': ('Sorry, but it would be better if you send your photo as a file. If you send it just as a photo, '
