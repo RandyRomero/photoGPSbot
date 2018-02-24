@@ -101,22 +101,21 @@ def change_user_language(message):
         return False
 
 
-@bot.message_handler(commands=['start'])
-def main_menu(message):
-    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    markup.row('Русский/English')
-    markup.row('Самые популярные смартфоны/камеры пользователей @photogpsbot')
-    markup.row('Самые популярные объективы пользователей @photogpsbot')
-    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['menu_header'], reply_markup=markup)
-
-
-@bot.message_handler(commands=[config.abort])
-def turn_bot_off(message):
+def turn_bot_off():
     db_connector.disconnect()
     log.info('Please wait for a sec, bot is turning off...')
     bot.stop_polling()
     log.info('Auf Wiedersehen! Bot is turned off.')
     exit()
+
+
+@bot.message_handler(commands=['start'])
+def create_main_keyboard(message):
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.row('Русский/English')
+    markup.row(lang_msgs[get_user_lang(message)]['top_cams'])
+    markup.row(lang_msgs[get_user_lang(message)]['top_lens'])
+    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['menu_header'], reply_markup=markup)
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
@@ -125,10 +124,20 @@ def answer_text_message(message):
     if message.text == 'Русский/English':
         if change_user_language(message):
             bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_success'])
+            create_main_keyboard(message)
         else:
             bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_failure'])
+            create_main_keyboard(message)
 
-        # bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
+    elif (message.text == lang_msgs[get_user_lang(message)]['top_cams']
+          or message.text == lang_msgs[get_user_lang(message)]['top_lens']):
+        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
+
+    elif message.text == config.abort:
+        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['bye'])
+        turn_bot_off()
+
+    # bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
     # elif message.text == 'English':
     #     lang = language_pack.language_en
     #     bot.send_message(message.chat.id, text='You chose English.', reply_markup=keyboard_hider)

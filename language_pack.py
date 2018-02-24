@@ -15,7 +15,11 @@ lang_msgs = {
         'bad_gps': 'Не могу распознать формат GPS. Напиши @SavageRandy, вдруг починит.',
         'no_exif': 'В этой фотографии нет EXIF-данных.',
         'photo_prcs': 'Поймал! Обрабатываю...',
-        'camera_info': ['Дата съёмки: ', 'Камера: ', 'Объектив: ']
+        'camera_info': ['Дата съёмки: ', 'Камера: ', 'Объектив: '],
+        'top_cams': 'Самые популярные смартфоны/камеры пользователей @photogpsbot',
+        'top_lens': 'Самые популярные объективы пользователей @photogpsbot',
+        'oops': 'Упс! Эта фича пока еще в разработке.',
+        'bye': 'Бот прощается с вами!'
             },
 
     'en-US': {
@@ -30,6 +34,10 @@ lang_msgs = {
         'bad_gps': 'Cannot read GPS from this photo. Maybe @SavageRandy can help you.',
         'no_exif': 'This photo does not contain any data. Maybe you have another one?',
         'photo_prcs': 'Wait a sec... *sounds of heavy machinery*',
-        'camera_info': ['Date: ', 'Camera brand: ', 'Lens brand: ']
+        'camera_info': ['Date: ', 'Camera brand: ', 'Lens brand: '],
+        'top_cams': 'The most popular cameras/smartphones among user of the @photogpsbot',
+        'top_lens': 'The most popular lens among user of the @photogpsbot',
+        'oops': 'This feature is coming soon...',
+        'bye': 'Goodbye! Bot is turning off...'
             }
 }
