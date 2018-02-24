@@ -30,6 +30,6 @@ lang_msgs = {
         'bad_gps': 'Cannot read GPS from this photo. Maybe @SavageRandy can help you.',
         'no_exif': 'This photo does not contain any data. Maybe you have another one?',
         'photo_prcs': 'Wait a sec... *sounds of heavy machinery*',
-        'camera_info': ['Date', 'Camera brand: ', 'Lens brand: ']
+        'camera_info': ['Date: ', 'Camera brand: ', 'Lens brand: ']
             }
 }
