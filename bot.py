@@ -13,7 +13,7 @@ import requests
 from io import BytesIO
 import traceback
 from handle_logs import log, clean_log_folder
-import language_pack
+from language_pack import lang_msgs
 import db_connector
 import MySQLdb
 
@@ -24,7 +24,8 @@ clean_log_folder(20)
 bot = telebot.TeleBot(config.token)
 # TODO Make command to safely turn bot down when necessary (closing ssh and connection to db)
 # TODO Store language choice of each user not in a freaking global variable which is common for everyone, but in db
-lang = language_pack.language_ru
+# lang = language_pack.language_ru
+# lang[user_lang[chat_id]]
 
 # Connect to db
 db = db_connector.connect()
@@ -37,40 +38,106 @@ if not db:
 db.ping(True)
 cursor = db.cursor()
 
+user_lang = {}
 
-@bot.message_handler(commands=['language', 'start'])
-def choose_language(message):
-    keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    rus = types.KeyboardButton(text='Русский')
-    en = types.KeyboardButton(text='English')
-    keyboard.add(rus, en)
-    bot.send_message(message.chat.id, text='Выбери язык / Choose language', reply_markup=keyboard)
+
+def load_last_user_languages():
+    pass
+
+
+def get_user_lang(message):
+    """
+    Function to look up user language in dictionary (which is like cache), than in database (if it is not in dict),
+    then set language according to language code from telegram message object
+    :param message: telegram message object
+    :return: language tag like ru-RU, en-US
+    """
+    log.debug('################ get user language debug info ################')
+    chat_id = message.chat.id
+    log.debug('Defining user {} language...'.format(chat_id))
+    log.debug('Looking up in memory...')
+    lang = user_lang.get(chat_id, None)
+    if not lang:
+        log.debug('There is no entry about user {} language in memory. Looking up in database...'.format(chat_id))
+        query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
+        try:
+            row = cursor.execute(query)
+        except (MySQLdb.Error, MySQLdb.Warning) as e:
+                log.error(e)
+                turn_bot_off()
+        if row:
+            lang = cursor.fetchone()[0]
+            log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
+            user_lang[chat_id] = lang
+        else:
+            log.debug('There is no entry about user {} language whatsoever.'.format(chat_id))
+            log.debug('Storing entry about user {} language in database and in memory...'.format(chat_id))
+            lang = message.from_user.language_code
+            log.debug('User {} agent language is '.format(chat_id, lang))
+            lang = 'en-US' if not lang.startswith('ru') or not lang.startswith('en') else lang
+            log.debug('User {} default language for bot is set to be {}.'.format(chat_id, lang))
+            query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
+            try:
+                cursor.execute(query)
+            except (MySQLdb.Error, MySQLdb.Warning) as e:
+                log.error(e)
+                turn_bot_off()
+            db.commit()
+            user_lang[chat_id] = lang
+            log.debug('Language of user {} is {}. Was stored in memory and database.'.format(chat_id, lang))
+    else:
+        log.debug('Language for user {} is {}. Was found in memory.'.format(chat_id, lang))
+
+    log.debug('################ end of user language debug info ################\n')
+    return lang
+
+
+def change_language():
+    pass
+
+
+@bot.message_handler(commands=['start'])
+def main_menu(message):
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.row('Русский/English')
+    markup.row('Самые популярные смартфоны/камеры пользователей @photogpsbot')
+    markup.row('Самые популярные объективы пользователей @photogpsbot')
+    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['menu_header'], reply_markup=markup)
+
+
+@bot.message_handler(commands=[config.abort])
+def turn_bot_off(message):
+    db_connector.disconnect()
+    log.info('Please wait for a sec, bot is turning off...')
+    bot.stop_polling()
+    log.info('Auf Wiedersehen! Bot is turned off.')
+    exit()
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
 def answer_text_message(message):
-    global lang
-    keyboard_hider = telebot.types.ReplyKeyboardRemove()
-    if message.text == 'Русский':
-        lang = language_pack.language_ru
-        bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
-    elif message.text == 'English':
-        lang = language_pack.language_en
-        bot.send_message(message.chat.id, text='You chose English.', reply_markup=keyboard_hider)
-
-    else:
-        # Function that echos all users messages
-        bot.send_message(message.chat.id, lang['dont_speak'])
-        log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
-                                                                                          message.from_user.last_name,
-                                                                                          message.from_user.username,
-                                                                                          message.from_user.id))
-        log.info(log_msg)
+    # keyboard_hider = telebot.types.ReplyKeyboardRemove()
+    if message.text == 'Русский/English':
+        pass
+        # TODO Make function to change language
+        # bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
+    # elif message.text == 'English':
+    #     lang = language_pack.language_en
+    #     bot.send_message(message.chat.id, text='You chose English.', reply_markup=keyboard_hider)
+#
+#     else:
+#         # Function that echos all users messages
+#         bot.send_message(message.chat.id, lang['dont_speak'])
+#         log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
+#                                                                                           message.from_user.last_name,
+#                                                                                           message.from_user.username,
+#                                                                                           message.from_user.id))
+#         log.info(log_msg)
 
 
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
-    bot.send_message(message.chat.id, lang['as_file'])
+    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['as_file'])
     log_message = ('Name: {} Last name: {} Nickname: {} ID: {} sent '
                    'photo as a photo.'.format(message.from_user.first_name,
                                               message.from_user.last_name,
@@ -89,7 +156,7 @@ def dedupe_string(string):
     return deduped_string.rstrip()
 
 
-def exif_to_dd(data):
+def exif_to_dd(data, message):
     # Convert exif gps to format that accepts Telegram (and Google Maps for example)
 
     try:
@@ -100,7 +167,7 @@ def exif_to_dd(data):
         lon = data['GPS GPSLongitude']
     except KeyError:
         log.info('This picture doesn\'t contain coordinates.')
-        return [lang['no_gps']]
+        return [lang_msgs[get_user_lang(message)]['no_gps']]
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     # convert ifdtag from exifread module to decimal degree format of coordinate
@@ -123,7 +190,7 @@ def exif_to_dd(data):
     lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
     lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
     if lat is False or lon is False:
-        return [lang['bad_gps']]
+        return [lang_msgs[get_user_lang(message)]['bad_gps']]
     else:
         return [lat, lon]
 
@@ -196,7 +263,7 @@ def save_camera_info(data):
     log.debug('############## end of debug info about storing exif to db###############\n')
 
 
-def read_exif(image):
+def read_exif(image, message):
 
     answer = []
     exif = exifread.process_file(image, details=False)
@@ -204,7 +271,7 @@ def read_exif(image):
         log.info('This picture doesn\'t contain EXIF.')
         return False, False
 
-    answer.extend(exif_to_dd(exif))
+    answer.extend(exif_to_dd(exif, message))
 
     # Get necessary tags from EXIF data
 
@@ -217,10 +284,6 @@ def read_exif(image):
     if not any([date_time, camera_brand, camera_model, lens_brand, lens_model]):
         return False  # Means that there is actually no any data of our interest
 
-    # TODO Check tags against mysql db
-    # TODO Store proper tag in mysql (now it's broken)
-    # to send it to database after bot answers to user
-
     # Make user message about camera from exif
     date_time_str = str(date_time) if date_time is not None else None
     camera = dedupe_string(camera_brand + ' ' + camera_model) if camera_brand + ' ' + camera_model != ' ' else None
@@ -230,7 +293,7 @@ def read_exif(image):
     camera_info = camera, lens
 
     info_about_shot = ''
-    for tag, item in zip(lang['camera_info'], [date_time_str, camera, lens]):
+    for tag, item in zip(lang_msgs[get_user_lang(message)]['camera_info'], [date_time_str, camera, lens]):
         if item:
             info_about_shot += tag + item + '\n'
 
@@ -240,7 +303,7 @@ def read_exif(image):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
-    bot.send_message(message.chat.id, lang['photo_prcs'])
+    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['photo_prcs'])
     log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(message.from_user.first_name,
                                                                                          message.from_user.last_name,
                                                                                          message.from_user.username,
@@ -257,9 +320,9 @@ def handle_image(message):
     user_file = BytesIO(r.content)  # Get file-like object of user's photo
 
     # Get coordinates
-    answer, cam_info = read_exif(user_file)
+    answer, cam_info = read_exif(user_file, message)
     if not answer:
-        bot.send_message(message.chat.id, lang['no_exif'])
+        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['no_exif'])
     elif len(answer) == 3:  # Sent location and info back to user
         lat, lon = answer[0], answer[1]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
