@@ -22,7 +22,6 @@ log.info('Cleaning log folder...')
 clean_log_folder(20)
 
 bot = telebot.TeleBot(config.token)
-# TODO Make command to safely turn bot down when necessary (closing ssh and connection to db)
 
 # Connect to db
 db = db_connector.connect()
@@ -136,12 +135,14 @@ def answer_text_message(message):
     elif message.text == config.abort:
         bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['bye'])
         turn_bot_off()
+    else:
+        log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
+                                                                                        message.from_user.last_name,
+                                                                                        message.from_user.username,
+                                                                                        message.from_user.id))
 
-    # bot.send_message(message.chat.id, text='Вы выбрали русский язык.', reply_markup=keyboard_hider)
-    # elif message.text == 'English':
-    #     lang = language_pack.language_en
-    #     bot.send_message(message.chat.id, text='You chose English.', reply_markup=keyboard_hider)
-    #
+        # Answer to user that bot can't make a conversation with him
+        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['dont_speak'])
 
 
 @bot.message_handler(content_types=['photo'])
