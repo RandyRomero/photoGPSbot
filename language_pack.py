@@ -8,7 +8,7 @@ lang_msgs = {
         'switch_lang_failure': 'Не удалось сменить язык. Попробуйте позже.',
         'dont_speak': ('Я не умею разговаривать, но, если ты пришлёшь мне фотографию, '
                        'я отправлю тебе карту с указанием, где эта фотография была сделана, дату съёмки и информацию'
-                       'о камере.'),
+                       ' о камере.'),
         'as_file': ('Прости, но фотографию нужно отправлять, как файл. Если отправлять её просто как фото, '
                     'то Telegram сожмёт её и выбросит данные о местоположении, и я не смогу тебе его прислать.'),
         'no_gps': 'Это фотография не имеет GPS-данных. Попробуй другую.',
@@ -18,7 +18,8 @@ lang_msgs = {
         'camera_info': ['Дата съёмки: ', 'Камера: ', 'Объектив: '],
         'top_cams': 'Самые популярные смартфоны/камеры пользователей @photogpsbot',
         'top_lens': 'Самые популярные объективы пользователей @photogpsbot',
-        'oops': 'Упс! Эта фича пока еще в разработке.',
+        'oops': 'Упс! Эта фича пока еще в разработке. Но, если ты пришлёшь мне фотографию, '
+                'я отправлю тебе карту с указанием, где эта фотография была сделана',
         'bye': 'Бот прощается с вами!'
             },
 
@@ -37,7 +38,8 @@ lang_msgs = {
         'camera_info': ['Date: ', 'Camera brand: ', 'Lens brand: '],
         'top_cams': 'The most popular cameras/smartphones among user of the @photogpsbot',
         'top_lens': 'The most popular lens among user of the @photogpsbot',
-        'oops': 'This feature is coming soon...',
+        'oops': 'This feature is coming soon. But if you send me a photo (as a file), I will send you back the location'
+                ' where it was taken',
         'bye': 'Goodbye! Bot is turning off...'
             }
 }
