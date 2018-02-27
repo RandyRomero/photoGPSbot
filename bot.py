@@ -313,7 +313,7 @@ def read_exif(image, message):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
-    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['photo_prcs'])
+    bot.reply_to(message, lang_msgs[get_user_lang(message)]['photo_prcs'])
     log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(message.from_user.first_name,
                                                                                          message.from_user.last_name,
                                                                                          message.from_user.username,
@@ -332,11 +332,11 @@ def handle_image(message):
     # Get coordinates
     answer, cam_info = read_exif(user_file, message)
     if not answer:
-        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['no_exif'])
+        bot.reply_to(message, lang_msgs[get_user_lang(message)]['no_exif'])
     elif len(answer) == 3:  # Sent location and info back to user
         lat, lon = answer[0], answer[1]
         bot.send_location(message.chat.id, lat, lon, live_period=None)
-        bot.send_message(message.chat.id, text=answer[2])
+        bot.reply_to(message, text=answer[2])
         log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
                    '{} ID: {}'.format(message.from_user.first_name,
                                       message.from_user.last_name,
@@ -346,7 +346,7 @@ def handle_image(message):
         log.info(log_msg)
         save_camera_info(cam_info)
     else:
-        bot.send_message(message.chat.id, answer[0] + '\n' + answer[1])
+        bot.reply_to(message, answer[0] + '\n' + answer[1])
         log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
                    '{} ID: {}'.format(message.from_user.first_name,
                                       message.from_user.last_name,

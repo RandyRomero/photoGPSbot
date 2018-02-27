@@ -24,7 +24,7 @@ lang_msgs = {
             },
 
     'en-US': {
-        'menu_header': 'Send photo or choose of one options below',
+        'menu_header': 'Send photo or choose one of the options below:',
         'switch_lang_success': 'Now I\'m speaking English.',
         'switch_lang_failure': 'I can\'t change language. Try again later.',
         'dont_speak': ('I cannot speak, but if you send me a photo (as a file), I will send you back the location'
