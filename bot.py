@@ -16,6 +16,7 @@ from handle_logs import log, clean_log_folder
 from language_pack import lang_msgs
 import db_connector
 import MySQLdb
+from datetime import datetime, timedelta
 
 log.info('Starting photoGPSbot...')
 log.info('Cleaning log folder...')
@@ -37,6 +38,7 @@ cursor = db.cursor()
 user_lang = {}
 
 
+# TODO Make caching for user languages
 def load_last_user_languages(message):
     pass
 
@@ -57,42 +59,42 @@ def get_user_lang(message):
     :param message: telegram message object
     :return: language tag like ru-RU, en-US
     """
-    log.debug('################ get user language debug info ################')
+    # log.debug('################ get user language debug info ################')
     chat_id = message.chat.id
-    log.debug('Defining user {} language...'.format(chat_id))
-    log.debug('Looking up in memory...')
+    log.info('Defining user {} language...'.format(chat_id))
+    # log.debug('Looking up in memory...')
     lang = user_lang.get(chat_id, None)
     if not lang:
-        log.debug('There is no entry about user {} language in memory. Looking up in database...'.format(chat_id))
+        # log.debug('There is no entry about user {} language in memory. Looking up in database...'.format(chat_id))
         query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
         row = cursor.execute(query)
         if row:
             lang = cursor.fetchone()[0]
-            log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
+            # log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
             user_lang[chat_id] = lang
         else:
-            log.debug('There is no entry about user {} language whatsoever.'.format(chat_id))
-            log.debug('Storing entry about user {} language in database and in memory...'.format(chat_id))
+            # log.debug('There is no entry about user {} language whatsoever.'.format(chat_id))
+            # log.debug('Storing entry about user {} language in database and in memory...'.format(chat_id))
             lang = message.from_user.language_code
-            log.debug('User {} agent language is '.format(chat_id, lang))
+            # log.debug('User {} agent language is '.format(chat_id, lang))
             lang = 'en-US' if not lang.startswith('ru') or not lang.startswith('en') else lang
-            log.debug('User {} default language for bot is set to be {}.'.format(chat_id, lang))
+            log.info('User {} default language for bot is set to be {}.'.format(chat_id, lang))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
             cursor.execute(query)
             db.commit()
             user_lang[chat_id] = lang
-            log.debug('Language of user {} is {}. Was stored in memory and database.'.format(chat_id, lang))
-    else:
-        log.debug('Language for user {} is {}. Was found in memory.'.format(chat_id, lang))
+            # log.debug('Language of user {} is {}. Was stored in memory and database.'.format(chat_id, lang))
+    # else:
+        # log.debug('Language for user {} is {}. Was found in memory.'.format(chat_id, lang))
 
-    log.debug('################ end of user language debug info ################\n')
+    # log.debug('################ end of user language debug info ################\n')
     return lang
 
 
 def change_user_language(message):
     curr_lang = get_user_lang(message)
     new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
-    log.debug('Changing user {} language from {} to {}...'.format(message.chat.id, curr_lang, new_lang))
+    log.info('Changing user {} language from {} to {}...'.format(message.chat.id, curr_lang, new_lang))
     try:
         set_user_language(message.chat.id, new_lang)
         return True
@@ -118,7 +120,7 @@ def create_main_keyboard(message):
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
-def answer_text_message(message):
+def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
     if message.text == 'Русский/English':
         if change_user_language(message):
@@ -128,9 +130,12 @@ def answer_text_message(message):
             bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_failure'])
             create_main_keyboard(message)
 
-    elif (message.text == lang_msgs[get_user_lang(message)]['top_cams']
-          or message.text == lang_msgs[get_user_lang(message)]['top_lens']):
-        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
+    elif message.text == lang_msgs[get_user_lang(message)]['top_cams']:
+        get_most_popular_items('camera_name')
+
+    elif message.text == lang_msgs[get_user_lang(message)]['top_lens']:
+        get_most_popular_items('lens_name')
+        # bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
 
     elif message.text == config.abort:
         bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['bye'])
@@ -221,7 +226,7 @@ def check_camera_tags(tags):
                 row = cursor.execute(query)
                 if row:
                     tag = cursor.fetchone()[0]  # Get appropriate tag from the table
-                    log.debug('Tag after looking up in tag_tables - {}.'.format(tag))
+                    log.info('Tag after looking up in tag_tables - {}.'.format(tag))
             except (MySQLdb.Error, MySQLdb.Warning) as e:
                 log.error(e)
 
@@ -230,47 +235,38 @@ def check_camera_tags(tags):
     return checked_tags
 
 
+# TODO Finish this
+def get_most_popular_items(cam_or_lens):
+    # timestr = time.strftime('%Y-%m-%d %H:%M:%S')
+    month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
+    query = 'SELECT {} FROM photo_queries_table WHERE time > "{}"'.format(cam_or_lens, month_ago)
+    rows = cursor.execute(query)
+    if rows:
+        results = cursor.fetchall()
+        for line in results:
+            print(line)
+
+
 # Save camera info to database to collect statistics
-def save_camera_info(data):
+def save_camera_info(data, message):
     global db
+    camera_name, lens_name = data
+    chat_id = message.chat.id
+    first_name = message.from_user.first_name
+    last_name = message.from_user.last_name
+    username = message.from_user.username
 
-    tables = ['camera_name_table', 'lens_name_table']
-    columns = ['camera_name', 'lens_name']
-
-    log.debug('############# debug info about storing exif to db ################')
-    for tag, table, column in zip(data, tables, columns):
-
-        if tag:
-            log.debug('Name: {}; Table: {}; Column: {} from EXIF'.format(tag, table, column))
-            while True:
-                try:
-                    query = 'SELECT id FROM {} WHERE {} = "{}"'.format(table, column, tag)
-                    row = cursor.execute(query)
-                    break
-                except (MySQLdb.Error, MySQLdb.Warning) as e:
-                    log.console(e)
-                    return
-
-            if not row:
-                try:
-                    query = ('INSERT INTO {} ({}, occurrences)'
-                             'VALUES ("{}", 1);'.format(table, column, tag))
-                    cursor.execute(query)
-                    db.commit()
-                    log.info('{} was added to {}'.format(tag, table))
-                except (MySQLdb.Error, MySQLdb.Warning) as e:
-                    log.error(e)
-            else:
-                try:
-                    log.debug('There is {} in {} already'.format(tag, table))
-                    query = 'UPDATE {} SET occurrences = occurrences + 1 WHERE {}="{}"'.format(table, column, tag)
-                    cursor.execute(query)
-                    db.commit()
-                    log.debug('{} in {} was updated'.format(tag, table))
-                except (MySQLdb.Error, MySQLdb.Warning) as e:
-                    log.error(e)
-
-    log.debug('############## end of debug info about storing exif to db###############\n')
+    if camera_name:
+        try:
+            log.info('Adding new entry to photo_queries_table...')
+            query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
+                     ' username)VALUES ({}, "{}", "{}", "{}", "{}", "{}")'.format(chat_id, camera_name, lens_name,
+                                                                                  first_name, last_name, username))
+            cursor.execute(query)
+            db.commit()
+        except (MySQLdb.Error, MySQLdb.Warning) as e:
+            log.error(e)
+            return
 
 
 def read_exif(image, message):
@@ -344,7 +340,7 @@ def handle_image(message):
                                       message.from_user.id))
 
         log.info(log_msg)
-        save_camera_info(cam_info)
+        save_camera_info(cam_info, message)
     else:
         bot.reply_to(message, answer[0] + '\n' + answer[1])
         log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
@@ -353,7 +349,7 @@ def handle_image(message):
                                       message.from_user.username,
                                       message.from_user.id))
         log.info(log_msg)
-        save_camera_info(cam_info)
+        save_camera_info(cam_info, message)
 
 # error_counter = 0
 # while True:
