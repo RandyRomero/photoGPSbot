@@ -110,6 +110,15 @@ def turn_bot_off():
     exit()
 
 
+def make_list_of_popular_gadgets(list_of_gadgets):
+    string_roaster = ''
+    index = 1
+    for item in list_of_gadgets:
+        string_roaster += '{}. {}\n'.format(index, item)
+        index += 1
+    return string_roaster
+
+
 @bot.message_handler(commands=['start'])
 def create_main_keyboard(message):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -131,13 +140,14 @@ def handle_menu_response(message):
             create_main_keyboard(message)
 
     elif message.text == lang_msgs[get_user_lang(message)]['top_cams']:
-        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
-        get_most_popular_items('camera_name')
+        log.info('User {} asked for top cams'.format(message.chat.id))
+        bot.send_message(message.chat.id, text=make_list_of_popular_gadgets(get_most_popular_items('camera_name')))
+        log.info('Returned to {} list of most popular cams.'.format(message.chat.id))
 
     elif message.text == lang_msgs[get_user_lang(message)]['top_lens']:
-        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
-        get_most_popular_items('lens_name')
-
+        log.info('User {} asked for top lens'.format(message.chat.id))
+        bot.send_message(message.chat.id, text=make_list_of_popular_gadgets(get_most_popular_items('lens_name')))
+        log.info('Returned to {} list of most popular cams'.format(message.chat.id))
 
     elif message.text == config.abort:
         bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['bye'])
@@ -233,14 +243,12 @@ def check_camera_tags(tags):
                 log.error(e)
 
         checked_tags.append(tag)
-
     return checked_tags
 
 
-# TODO Finish this
 def get_most_popular_items(cam_or_lens):
-    sorted_items = {}
-    # timestr = time.strftime('%Y-%m-%d %H:%M:%S')
+    log.info('Getting most polular gadgets...')
+    most_popular_gadgets = {}
     month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
     query = 'SELECT {} FROM photo_queries_table WHERE time > "{}"'.format(cam_or_lens, month_ago)
     rows = cursor.execute(query)
@@ -249,12 +257,18 @@ def get_most_popular_items(cam_or_lens):
         while True:
             try:
                 item = cursor.fetchone()[0]
-                sorted_items[item] = 1 if item not in sorted_items else sorted_items[item] + 1
-            except TypeError:
-                # TODO Sort output to print the most popular at first
-                for k, v in sorted_items.items():
-                    print(k, v)
-                break
+                if item == 'None':  # Skip empty cells
+                    continue
+                most_popular_gadgets[item] = 1 if item not in most_popular_gadgets else most_popular_gadgets[item] + 1
+            except TypeError:  # If there is nothing to catch from cursor anymore
+                # Sort dictionary keys by values
+                most_popular_gadgets = sorted(most_popular_gadgets, key=lambda x: most_popular_gadgets[x], reverse=True)
+                len_most_popular_gadgets = len(most_popular_gadgets)
+                log.info('There are {} gadgets in database since {}'.format(len_most_popular_gadgets, month_ago))
+                if len_most_popular_gadgets > 30:
+                    return most_popular_gadgets[:30]
+                else:
+                    return most_popular_gadgets
 
 
 # Save camera info to database to collect statistics
