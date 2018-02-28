@@ -36,8 +36,8 @@ lang_msgs = {
         'no_exif': 'This photo does not contain any data. Maybe you have another one?',
         'photo_prcs': 'Wait a sec... *sounds of heavy machinery*',
         'camera_info': ['Date: ', 'Camera brand: ', 'Lens brand: '],
-        'top_cams': 'The most popular cameras/smartphones among user of the @photogpsbot',
-        'top_lens': 'The most popular lens among user of the @photogpsbot',
+        'top_cams': 'The most popular cameras/smartphones according to @photogpsbot for the last 30 days',
+        'top_lens': 'The most popular lens according to @photogpsbot for the last 30 days',
         'oops': 'This feature is coming soon. But if you send me a photo (as a file), I will send you back the location'
                 ' where it was taken',
         'bye': 'Goodbye! Bot is turning off...'

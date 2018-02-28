@@ -131,11 +131,13 @@ def handle_menu_response(message):
             create_main_keyboard(message)
 
     elif message.text == lang_msgs[get_user_lang(message)]['top_cams']:
+        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
         get_most_popular_items('camera_name')
 
     elif message.text == lang_msgs[get_user_lang(message)]['top_lens']:
+        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
         get_most_popular_items('lens_name')
-        # bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['oops'])
+
 
     elif message.text == config.abort:
         bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['bye'])
@@ -237,14 +239,22 @@ def check_camera_tags(tags):
 
 # TODO Finish this
 def get_most_popular_items(cam_or_lens):
+    sorted_items = {}
     # timestr = time.strftime('%Y-%m-%d %H:%M:%S')
     month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
     query = 'SELECT {} FROM photo_queries_table WHERE time > "{}"'.format(cam_or_lens, month_ago)
     rows = cursor.execute(query)
     if rows:
-        results = cursor.fetchall()
-        for line in results:
-            print(line)
+        # Make dictionary to count how may occurrences of each camera or lens we have in our database table
+        while True:
+            try:
+                item = cursor.fetchone()[0]
+                sorted_items[item] = 1 if item not in sorted_items else sorted_items[item] + 1
+            except TypeError:
+                # TODO Sort output to print the most popular at first
+                for k, v in sorted_items.items():
+                    print(k, v)
+                break
 
 
 # Save camera info to database to collect statistics
