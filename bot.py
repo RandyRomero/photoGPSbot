@@ -29,7 +29,7 @@ db = db_connector.connect()
 if not db:
     log.warning('Can\'t connect to db.')
 
-# ping(True) checks whether or not the connection to the server is
+# ping(True) set to check whether or not the connection to the server is
 # working. If it has gone down, an automatic reconnection is
 # attempted.
 db.ping(True)
@@ -110,15 +110,6 @@ def turn_bot_off():
     exit()
 
 
-def make_list_of_popular_gadgets(list_of_gadgets):
-    string_roaster = ''
-    index = 1
-    for item in list_of_gadgets:
-        string_roaster += '{}. {}\n'.format(index, item)
-        index += 1
-    return string_roaster
-
-
 @bot.message_handler(commands=['start'])
 def create_main_keyboard(message):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -141,12 +132,12 @@ def handle_menu_response(message):
 
     elif message.text == lang_msgs[get_user_lang(message)]['top_cams']:
         log.info('User {} asked for top cams'.format(message.chat.id))
-        bot.send_message(message.chat.id, text=make_list_of_popular_gadgets(get_most_popular_items('camera_name')))
+        bot.send_message(message.chat.id, text=get_most_popular_cams_cached('camera_name', message))
         log.info('Returned to {} list of most popular cams.'.format(message.chat.id))
 
     elif message.text == lang_msgs[get_user_lang(message)]['top_lens']:
         log.info('User {} asked for top lens'.format(message.chat.id))
-        bot.send_message(message.chat.id, text=make_list_of_popular_gadgets(get_most_popular_items('lens_name')))
+        bot.send_message(message.chat.id, text=get_most_popular_lens_cached('lens_name', message))
         log.info('Returned to {} list of most popular cams'.format(message.chat.id))
 
     elif message.text == config.abort:
@@ -181,6 +172,39 @@ def dedupe_string(string):
         if x not in deduped_string:
             deduped_string += x + ' '
     return deduped_string.rstrip()
+
+
+def cache_func(func, cache_time):
+    """
+    Function that prevent calling any given function more often that once in a cache_time.
+    It calls given function, then during next cache_times minute it will return cached result of a given function.
+    It should save some time.
+
+    :param func: some expensive function that we don't want to call to often because it can slow down the script
+    :param cache_time: minutes how much to wait between real func calling and returning cached result
+    :return: wrapper that figure out when to call function and when to return cached result
+    """
+    when_was_called = None  # initialize datetime object
+    result = None
+
+    def function_launcher(*args):
+        nonlocal func
+        nonlocal result
+        nonlocal when_was_called
+
+        # when_was_called is None only first time function if called
+        # Than it is needed to figure out how many time is left since given func was called last time
+        if not when_was_called or when_was_called + timedelta(minutes=cache_time) < datetime.now():
+            when_was_called = datetime.now()
+            result = func(*args)
+            return result
+        else:
+            log.debug('Return cached result of {}...'.format(func.__name__))
+            time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
+            log.debug('Time to reevaluate result is {}'.format(time_left))
+            return result
+
+    return function_launcher
 
 
 def exif_to_dd(data, message):
@@ -246,29 +270,51 @@ def check_camera_tags(tags):
     return checked_tags
 
 
-def get_most_popular_items(cam_or_lens):
-    log.info('Getting most polular gadgets...')
-    most_popular_gadgets = {}
+def get_most_popular_gadgets(cam_or_lens, message):
+    """
+    Get most common cameras/lenses from database and make list of them
+    :param cam_or_lens: string with column name to choose between cameras and lenses
+    :param message: telegram object message
+    :return: string which is either list of most common cameras/lenses or user message which states that list is empty
+    """
+
+    # Make python list to be string list with indexes and new line characters
+    def list_to_ordered_str_list(list_of_gadgets):
+        string_roaster = ''
+        index = 1
+        for gadget in list_of_gadgets:
+            string_roaster += '{}. {}\n'.format(index, gadget)
+            index += 1
+        return string_roaster
+
+    log.debug('Evaluating most popular gadgets...')
+    all_last_month_gadgets = {}
     month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
     query = 'SELECT {} FROM photo_queries_table WHERE time > "{}"'.format(cam_or_lens, month_ago)
     rows = cursor.execute(query)
-    if rows:
-        # Make dictionary to count how may occurrences of each camera or lens we have in our database table
-        while True:
-            try:
-                item = cursor.fetchone()[0]
-                if item == 'None':  # Skip empty cells
-                    continue
-                most_popular_gadgets[item] = 1 if item not in most_popular_gadgets else most_popular_gadgets[item] + 1
-            except TypeError:  # If there is nothing to catch from cursor anymore
-                # Sort dictionary keys by values
-                most_popular_gadgets = sorted(most_popular_gadgets, key=lambda x: most_popular_gadgets[x], reverse=True)
-                len_most_popular_gadgets = len(most_popular_gadgets)
-                log.info('There are {} gadgets in database since {}'.format(len_most_popular_gadgets, month_ago))
-                if len_most_popular_gadgets > 30:
-                    return most_popular_gadgets[:30]
-                else:
-                    return most_popular_gadgets
+    if not rows:
+        return lang_msgs[get_user_lang(message)]['no_top']
+    # Make dictionary to count how may occurrences of each camera or lens we have in our database table
+    while True:
+        try:
+            item = cursor.fetchone()[0]
+            if item == 'None':  # Skip empty cells
+                continue
+            all_last_month_gadgets[item] = 1 if item not in all_last_month_gadgets else all_last_month_gadgets[item] + 1
+        except TypeError:  # If there is nothing to catch from cursor anymore
+            # Sort dictionary keys by values
+            most_popular_gadgets = sorted(all_last_month_gadgets, key=lambda x: all_last_month_gadgets[x], reverse=True)
+            len_most_popular_gadgets = len(most_popular_gadgets)
+            log.info('There are {} gadgets in database since {}'.format(len_most_popular_gadgets, month_ago))
+            if len_most_popular_gadgets > 30:
+                return list_to_ordered_str_list(most_popular_gadgets[:30])
+            else:
+                return list_to_ordered_str_list(most_popular_gadgets)
+
+
+# Make closures
+get_most_popular_cams_cached = cache_func(get_most_popular_gadgets, 5)
+get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
 
 
 # Save camera info to database to collect statistics

@@ -20,6 +20,7 @@ lang_msgs = {
         'top_lens': 'Самые популярные объективы пользователей @photogpsbot за последние 30 дней.',
         'oops': 'Упс! Эта фича пока еще в разработке. Но, если ты пришлёшь мне фотографию, '
                 'я отправлю тебе карту с указанием, где эта фотография была сделана',
+        'no_top': 'Список пуст - прекрасный шанс возглавить его!',
         'bye': 'Бот прощается с вами!'
             },
 
@@ -40,6 +41,7 @@ lang_msgs = {
         'top_lens': 'The most popular lens according to @photogpsbot for the last 30 days',
         'oops': 'This feature is coming soon. But if you send me a photo (as a file), I will send you back the location'
                 ' where it was taken',
+        'no_top': 'The list is empty - you can be first!',
         'bye': 'Goodbye! Bot is turning off...'
             }
 }
