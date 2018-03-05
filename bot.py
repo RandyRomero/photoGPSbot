@@ -73,21 +73,13 @@ def get_user_lang(message):
             # log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
             user_lang[chat_id] = lang
         else:
-            # log.debug('There is no entry about user {} language whatsoever.'.format(chat_id))
-            # log.debug('Storing entry about user {} language in database and in memory...'.format(chat_id))
-            lang = message.from_user.language_code
-            # log.debug('User {} agent language is '.format(chat_id, lang))
-            lang = 'en-US' if not lang.startswith('ru') or not lang.startswith('en') else lang
-            log.info('User {} default language for bot is set to be {}.'.format(chat_id, lang))
+            lang = 'en-US'
+            log.info('User {} default language for bot is set to be en-US}.'.format(chat_id))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
             cursor.execute(query)
             db.commit()
             user_lang[chat_id] = lang
-            # log.debug('Language of user {} is {}. Was stored in memory and database.'.format(chat_id, lang))
-    # else:
-        # log.debug('Language for user {} is {}. Was found in memory.'.format(chat_id, lang))
 
-    # log.debug('################ end of user language debug info ################\n')
     return lang
 
 
@@ -315,6 +307,12 @@ def get_most_popular_gadgets(cam_or_lens, message):
 # Make closures
 get_most_popular_cams_cached = cache_func(get_most_popular_gadgets, 5)
 get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
+
+
+# TODO Make function that returns how many other users have the same camera/smartphone/lens
+def get_all_users_by_gadget_name(cam_or_lens, gadget):
+    query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(cam_or_lens, gadget)
+    return cursor.execute(query)
 
 
 # Save camera info to database to collect statistics
