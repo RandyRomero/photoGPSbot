@@ -74,7 +74,7 @@ def get_user_lang(message):
             user_lang[chat_id] = lang
         else:
             lang = 'en-US'
-            log.info('User {} default language for bot is set to be en-US}.'.format(chat_id))
+            log.info('User {} default language for bot is set to be en-US.'.format(chat_id))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
             cursor.execute(query)
             db.commit()
