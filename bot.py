@@ -240,16 +240,20 @@ def exif_to_dd(data, message):
 
 
 def check_camera_tags(tags):
-
+    """
+    Function that convert stupid code name of the phone or camera from EXIF to meaningful one by looking a
+    collation in a special MySQL table
+    For example instead of just Nikon there can be NIKON CORPORATION in EXIF
+    :param tags: name of a camera and lens
+    :return: list with one or two strings which are name of camera and/or lens. If there is not better name
+    for the gadget in database, function just returns name how it is
+    """
     checked_tags = []
 
     for tag in tags:
         if tag:  # if there was this information inside EXIF of the photo
             tag = str(tag).strip()
             log.info('Looking up collation for {}'.format(tag))
-
-            # Collate with special table if there more appropriate name for the tag
-            # For example instead of just Nikon there can be NIKON CORPORATION in EXIF
             try:
                 query = 'SELECT right_tag FROM tag_table WHERE wrong_tag="{}"'.format(tag)
                 row = cursor.execute(query)
@@ -311,9 +315,27 @@ get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
 
 
 # TODO Make function that returns how many other users have the same camera/smartphone/lens
-def get_all_users_by_gadget_name(cam_or_lens, gadget):
-    query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(cam_or_lens, gadget)
-    return cursor.execute(query)
+def get_number_users_by_gadget_name(gadgets, message):
+    log.debug('Check how many users also have this camera and lens...')
+    log.debug(gadgets)
+    answer = ''
+    gadget_types = 'camera_name', 'lens_name'
+    for gadget_type, gadget in zip(gadget_types, gadgets):
+        if not gadget:
+            continue
+        query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(gadget_type, gadget)
+        log.debug(query)
+        row = cursor.execute(query)
+        log.debug('row: ' + str(row))
+        if not row:
+            continue
+        if gadget_type == 'camera_name':
+            answer += lang_msgs[get_user_lang(message)]['camera_users'] + str(row) + '.\n'
+        elif gadget_type == 'lens_name':
+            answer += lang_msgs[get_user_lang(message)]['lens_users'] + str(row) + '.'
+
+    log.debug('Answer: ' + answer)
+    return answer
 
 
 # Save camera info to database to collect statistics
@@ -339,17 +361,16 @@ def save_camera_info(data, message):
 
 
 def read_exif(image, message):
-
     answer = []
     exif = exifread.process_file(image, details=False)
     if len(exif.keys()) < 1:
         log.info('This picture doesn\'t contain EXIF.')
         return False, False
 
+    # Convert EXIF data about location to decimal degrees
     answer.extend(exif_to_dd(exif, message))
 
     # Get necessary tags from EXIF data
-
     date_time = exif.get('EXIF DateTimeOriginal', None)
     camera_brand = str(exif.get('Image Make', ''))
     camera_model = str(exif.get('Image Model', ''))
@@ -365,6 +386,7 @@ def read_exif(image, message):
     lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
 
     camera, lens = check_camera_tags([camera, lens])
+    others_with_this_gadget = get_number_users_by_gadget_name([camera, lens], message)
     camera_info = camera, lens
 
     info_about_shot = ''
@@ -372,6 +394,7 @@ def read_exif(image, message):
         if item:
             info_about_shot += tag + item + '\n'
 
+    info_about_shot += others_with_this_gadget if others_with_this_gadget else ''
     answer.append(info_about_shot)
     return answer, camera_info
 
@@ -421,14 +444,15 @@ def handle_image(message):
         save_camera_info(cam_info, message)
 
 
+# If bot crashes, try to restart and send me a message
 def telegram_polling(state):
     try:
         bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
         if state == 'recovering':
             bot.send_message(config.me, text='Bot has restarted after critical error.')
     except:
-        db_connector.disconnect()
-        log.warning('Bot crashed with:\n' + traceback.format_exc())
+        # db_connector.disconnect()
+        # log.warning('Bot crashed with:\n' + traceback.format_exc())
         bot.stop_polling()
         time.sleep(5)
         telegram_polling('recovering')
