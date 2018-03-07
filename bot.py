@@ -53,15 +53,14 @@ def set_user_language(chat_id, lang):
     log.info('User {} language was switched to {}'.format(chat_id, lang))
 
 
-def get_user_lang(message):
+def get_user_lang(chat_id):
     """
     Function to look up user language in dictionary (which is like cache), than in database (if it is not in dict),
     then set language according to language code from telegram message object
-    :param message: telegram message object
+    :param chat_id: telegram message object
     :return: language tag like ru-RU, en-US
     """
     # log.debug('################ get user language debug info ################')
-    chat_id = message.chat.id
     log.info('Defining user {} language...'.format(chat_id))
     # log.debug('Looking up in memory...')
     lang = user_lang.get(chat_id, None)
@@ -84,12 +83,12 @@ def get_user_lang(message):
     return lang
 
 
-def change_user_language(message):
-    curr_lang = get_user_lang(message)
+def change_user_language(chat_id):
+    curr_lang = get_user_lang(chat_id)
     new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
-    log.info('Changing user {} language from {} to {}...'.format(message.chat.id, curr_lang, new_lang))
+    log.info('Changing user {} language from {} to {}...'.format(chat_id, curr_lang, new_lang))
     try:
-        set_user_language(message.chat.id, new_lang)
+        set_user_language(chat_id, new_lang)
         return True
     except:
         return False
@@ -104,37 +103,39 @@ def turn_bot_off():
 
 
 @bot.message_handler(commands=['start'])
-def create_main_keyboard(message):
+def create_main_keyboard(chat_id):
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row('Русский/English')
-    markup.row(lang_msgs[get_user_lang(message)]['top_cams'])
-    markup.row(lang_msgs[get_user_lang(message)]['top_lens'])
-    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['menu_header'], reply_markup=markup)
+    markup.row(lang_msgs[get_user_lang(chat_id)]['top_cams'])
+    markup.row(lang_msgs[get_user_lang(chat_id)]['top_lens'])
+    bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['menu_header'], reply_markup=markup)
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
 def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
+    chat_id = message.chat.id
     if message.text == 'Русский/English':
-        if change_user_language(message):
-            bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_success'])
-            create_main_keyboard(message)
+
+        if change_user_language(chat_id):
+            bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_success'])
+            create_main_keyboard(chat_id)
         else:
-            bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['switch_lang_failure'])
-            create_main_keyboard(message)
+            bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_failure'])
+            create_main_keyboard(chat_id)
 
-    elif message.text == lang_msgs[get_user_lang(message)]['top_cams']:
-        log.info('User {} asked for top cams'.format(message.chat.id))
-        bot.send_message(message.chat.id, text=get_most_popular_cams_cached('camera_name', message))
-        log.info('Returned to {} list of most popular cams.'.format(message.chat.id))
+    elif message.text == lang_msgs[get_user_lang(chat_id)]['top_cams']:
+        log.info('User {} asked for top cams'.format(chat_id))
+        bot.send_message(chat_id, text=get_most_popular_cams_cached('camera_name', chat_id))
+        log.info('Returned to {} list of most popular cams.'.format(chat_id))
 
-    elif message.text == lang_msgs[get_user_lang(message)]['top_lens']:
-        log.info('User {} asked for top lens'.format(message.chat.id))
-        bot.send_message(message.chat.id, text=get_most_popular_lens_cached('lens_name', message))
-        log.info('Returned to {} list of most popular cams'.format(message.chat.id))
+    elif message.text == lang_msgs[get_user_lang(chat_id)]['top_lens']:
+        log.info('User {} asked for top lens'.format(chat_id))
+        bot.send_message(chat_id, text=get_most_popular_lens_cached('lens_name', chat_id))
+        log.info('Returned to {} list of most popular cams'.format(chat_id))
 
     elif message.text == config.abort:
-        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['bye'])
+        bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['bye'])
         turn_bot_off()
     else:
         log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
@@ -143,12 +144,12 @@ def handle_menu_response(message):
                                                                                         message.from_user.id))
 
         # Answer to user that bot can't make a conversation with him
-        bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['dont_speak'])
+        bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['dont_speak'])
 
 
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
-    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message)]['as_file'])
+    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message.chat.id)]['as_file'])
     log_message = ('Name: {} Last name: {} Nickname: {} ID: {} sent '
                    'photo as a photo.'.format(message.from_user.first_name,
                                               message.from_user.last_name,
@@ -165,6 +166,21 @@ def dedupe_string(string):
         if x not in deduped_string:
             deduped_string += x + ' '
     return deduped_string.rstrip()
+
+# def cache_dict_func(func, cache_time):
+#     when_was_called = None
+#     result = {}
+#
+#     def func_launcher(*args):
+#         nonlocal func
+#         nonlocal result
+#         nonlocal when_was_called
+#
+#         if not when_was_called or when_was_called + timedelta(minutes=5) < datetime.now():
+#             when_was_called = datetime.now()
+#             result[] = func()
+#
+#     return func_launcher
 
 
 def cache_func(func, cache_time):
@@ -200,7 +216,7 @@ def cache_func(func, cache_time):
     return function_launcher
 
 
-def exif_to_dd(data, message):
+def exif_to_dd(data, chat_id):
     # Convert exif gps to format that accepts Telegram (and Google Maps for example)
 
     try:
@@ -211,7 +227,7 @@ def exif_to_dd(data, message):
         lon = data['GPS GPSLongitude']
     except KeyError:
         log.info('This picture doesn\'t contain coordinates.')
-        return [lang_msgs[get_user_lang(message)]['no_gps']]
+        return [lang_msgs[get_user_lang(chat_id)]['no_gps']]
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     # convert ifdtag from exifread module to decimal degree format of coordinate
@@ -234,7 +250,7 @@ def exif_to_dd(data, message):
     lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
     lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
     if lat is False or lon is False:
-        return [lang_msgs[get_user_lang(message)]['bad_gps']]
+        return [lang_msgs[get_user_lang(chat_id)]['bad_gps']]
     else:
         return [lat, lon]
 
@@ -267,7 +283,7 @@ def check_camera_tags(tags):
     return checked_tags
 
 
-def get_most_popular_gadgets(cam_or_lens, message):
+def get_most_popular_gadgets(cam_or_lens, chat_id):
     """
     Get most common cameras/lenses from database and make list of them
     :param cam_or_lens: string with column name to choose between cameras and lenses
@@ -290,7 +306,7 @@ def get_most_popular_gadgets(cam_or_lens, message):
     query = 'SELECT {} FROM photo_queries_table WHERE time > "{}"'.format(cam_or_lens, month_ago)
     rows = cursor.execute(query)
     if not rows:
-        return lang_msgs[get_user_lang(message)]['no_top']
+        return lang_msgs[get_user_lang(chat_id)]['no_top']
     # Make dictionary to count how may occurrences of each camera or lens we have in our database table
     while True:
         try:
@@ -315,7 +331,7 @@ get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
 
 
 # TODO Make function that returns how many other users have the same camera/smartphone/lens
-def get_number_users_by_gadget_name(gadgets, message):
+def get_number_users_by_gadget_name(gadgets, chat_id):
     log.debug('Check how many users also have this camera and lens...')
     log.debug(gadgets)
     answer = ''
@@ -330,9 +346,9 @@ def get_number_users_by_gadget_name(gadgets, message):
         if not row:
             continue
         if gadget_type == 'camera_name':
-            answer += lang_msgs[get_user_lang(message)]['camera_users'] + str(row) + '.\n'
+            answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row) + '.\n'
         elif gadget_type == 'lens_name':
-            answer += lang_msgs[get_user_lang(message)]['lens_users'] + str(row) + '.'
+            answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row) + '.'
 
     log.debug('Answer: ' + answer)
     return answer
@@ -361,6 +377,7 @@ def save_camera_info(data, message):
 
 
 def read_exif(image, message):
+    chat_id = message.chat.id
     answer = []
     exif = exifread.process_file(image, details=False)
     if len(exif.keys()) < 1:
@@ -368,7 +385,7 @@ def read_exif(image, message):
         return False, False
 
     # Convert EXIF data about location to decimal degrees
-    answer.extend(exif_to_dd(exif, message))
+    answer.extend(exif_to_dd(exif, chat_id))
 
     # Get necessary tags from EXIF data
     date_time = exif.get('EXIF DateTimeOriginal', None)
@@ -386,11 +403,11 @@ def read_exif(image, message):
     lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
 
     camera, lens = check_camera_tags([camera, lens])
-    others_with_this_gadget = get_number_users_by_gadget_name([camera, lens], message)
+    others_with_this_gadget = get_number_users_by_gadget_name([camera, lens], chat_id)
     camera_info = camera, lens
 
     info_about_shot = ''
-    for tag, item in zip(lang_msgs[get_user_lang(message)]['camera_info'], [date_time_str, camera, lens]):
+    for tag, item in zip(lang_msgs[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens]):
         if item:
             info_about_shot += tag + item + '\n'
 
@@ -401,7 +418,8 @@ def read_exif(image, message):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
-    bot.reply_to(message, lang_msgs[get_user_lang(message)]['photo_prcs'])
+    chat_id = message.chat.id
+    bot.reply_to(message, lang_msgs[get_user_lang(chat_id)]['photo_prcs'])
     log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(message.from_user.first_name,
                                                                                          message.from_user.last_name,
                                                                                          message.from_user.username,
@@ -420,10 +438,10 @@ def handle_image(message):
     # Get coordinates
     answer, cam_info = read_exif(user_file, message)
     if not answer:
-        bot.reply_to(message, lang_msgs[get_user_lang(message)]['no_exif'])
+        bot.reply_to(message, lang_msgs[get_user_lang(chat_id)]['no_exif'])
     elif len(answer) == 3:  # Sent location and info back to user
         lat, lon = answer[0], answer[1]
-        bot.send_location(message.chat.id, lat, lon, live_period=None)
+        bot.send_location(chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[2])
         log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
                    '{} ID: {}'.format(message.from_user.first_name,
