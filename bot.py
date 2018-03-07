@@ -17,6 +17,7 @@ from language_pack import lang_msgs
 import db_connector
 import MySQLdb
 from datetime import datetime, timedelta
+import time
 
 log.info('Starting photoGPSbot...')
 log.info('Cleaning log folder...')
@@ -419,28 +420,19 @@ def handle_image(message):
         log.info(log_msg)
         save_camera_info(cam_info, message)
 
-# error_counter = 0
-# while True:
-#     if error_counter == 30:
-#         log.error('Emergency stop due to loop of polling exceptions')
-#         exit()
-#     try:
-#         if __name__ == '__main__':
-#             bot.polling(none_stop=True)  # Keep bot receiving messages
-#     except:
-#         log.error('Freaking polling!')
-#         error_counter += 1
 
-
-def telegram_polling():
+def telegram_polling(state):
     try:
-        bot.polling(none_stop=True, timeout=60)  # Keep bot receiving messages
+        bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
+        if state == 'recovering':
+            bot.send_message(config.me, text='Bot has restarted after critical error.')
     except:
         db_connector.disconnect()
-        log.warning('Polling issue\n' + traceback.format_exc())
+        log.warning('Bot crashed with:\n' + traceback.format_exc())
         bot.stop_polling()
-        # telegram_polling()
+        time.sleep(5)
+        telegram_polling('recovering')
 
 
 if __name__ == '__main__':
-    telegram_polling()
+    telegram_polling('OK')
