@@ -67,7 +67,14 @@ def get_user_lang(chat_id):
     if not lang:
         # log.debug('There is no entry about user {} language in memory. Looking up in database...'.format(chat_id))
         query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
-        row = cursor.execute(query)
+        try:
+            row = cursor.execute(query)
+        except (MySQLdb.Error, MySQLdb.Warning) as e:
+            # If there is something wrong with database - just set default language to be English
+            lang = 'en-US'
+            user_lang[chat_id] = lang
+            return lang
+
         if row:
             lang = cursor.fetchone()[0]
             # log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
@@ -103,7 +110,9 @@ def turn_bot_off():
 
 
 @bot.message_handler(commands=['start'])
-def create_main_keyboard(chat_id):
+def create_main_keyboard(arg):
+    # arg can be integer that represent chat.id or message object from Telegram
+    chat_id = arg if isinstance(arg, int) else arg.chat.id
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row('Русский/English')
     markup.row(lang_msgs[get_user_lang(chat_id)]['top_cams'])
@@ -167,20 +176,33 @@ def dedupe_string(string):
             deduped_string += x + ' '
     return deduped_string.rstrip()
 
-# def cache_dict_func(func, cache_time):
-#     when_was_called = None
-#     result = {}
-#
-#     def func_launcher(*args):
-#         nonlocal func
-#         nonlocal result
-#         nonlocal when_was_called
-#
-#         if not when_was_called or when_was_called + timedelta(minutes=5) < datetime.now():
-#             when_was_called = datetime.now()
-#             result[] = func()
-#
-#     return func_launcher
+
+def cache_number_device_owners(func, cache_time):
+    when_was_called = None
+    result = {}
+
+    def func_launcher(gadget_name, device_type, chat_id):
+        nonlocal func
+        nonlocal result
+        nonlocal when_was_called
+
+        high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
+        if not when_was_called or high_time or gadget_name not in result:
+            print(result)
+            if gadget_name not in result:
+                log.debug(gadget_name + ' not in cache')
+
+            when_was_called = datetime.now()
+            result[gadget_name] = func(gadget_name, device_type, chat_id)
+            print(result)
+            return result[gadget_name]
+        else:
+            log.info('Returning cached result of ' + func.__name__)
+            time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
+            log.debug('Time to reevaluate result is {}'.format(time_left))
+            return result[gadget_name]
+
+    return func_launcher
 
 
 def cache_func(func, cache_time):
@@ -287,7 +309,7 @@ def get_most_popular_gadgets(cam_or_lens, chat_id):
     """
     Get most common cameras/lenses from database and make list of them
     :param cam_or_lens: string with column name to choose between cameras and lenses
-    :param message: telegram object message
+    :param chat_id: telegram object message
     :return: string which is either list of most common cameras/lenses or user message which states that list is empty
     """
 
@@ -331,27 +353,27 @@ get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
 
 
 # TODO Make function that returns how many other users have the same camera/smartphone/lens
-def get_number_users_by_gadget_name(gadgets, chat_id):
+def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
     log.debug('Check how many users also have this camera and lens...')
-    log.debug(gadgets)
+    log.debug(gadget_name)
     answer = ''
-    gadget_types = 'camera_name', 'lens_name'
-    for gadget_type, gadget in zip(gadget_types, gadgets):
-        if not gadget:
-            continue
-        query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(gadget_type, gadget)
-        log.debug(query)
-        row = cursor.execute(query)
-        log.debug('row: ' + str(row))
-        if not row:
-            continue
-        if gadget_type == 'camera_name':
-            answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row) + '.\n'
-        elif gadget_type == 'lens_name':
-            answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row) + '.'
 
-    log.debug('Answer: ' + answer)
+    query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(device_type, gadget_name)
+    row = cursor.execute(query)
+    log.debug('row: ' + str(row))
+    if not row:
+        return None
+    if device_type == 'camera_name':
+        answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row) + '.\n'
+    elif device_type == 'lens_name':
+        answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row) + '.'
+
+    # log.debug('Answer: ' + answer)
     return answer
+
+
+# Make closure which preservers result of the function in order not to call database too often
+get_number_all_owners_of_device = cache_number_device_owners(get_number_users_by_gadget_name, 30)
 
 
 # Save camera info to database to collect statistics
@@ -382,7 +404,7 @@ def read_exif(image, message):
     exif = exifread.process_file(image, details=False)
     if len(exif.keys()) < 1:
         log.info('This picture doesn\'t contain EXIF.')
-        return False, False
+        return False
 
     # Convert EXIF data about location to decimal degrees
     answer.extend(exif_to_dd(exif, chat_id))
@@ -403,7 +425,8 @@ def read_exif(image, message):
     lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
 
     camera, lens = check_camera_tags([camera, lens])
-    others_with_this_gadget = get_number_users_by_gadget_name([camera, lens], chat_id)
+    others_with_this_cam = get_number_all_owners_of_device(camera, 'camera_name', chat_id)
+    others_with_this_lens = get_number_all_owners_of_device(lens, 'lens_name', chat_id) if lens else None
     camera_info = camera, lens
 
     info_about_shot = ''
@@ -411,9 +434,10 @@ def read_exif(image, message):
         if item:
             info_about_shot += tag + item + '\n'
 
-    info_about_shot += others_with_this_gadget if others_with_this_gadget else ''
+    info_about_shot += others_with_this_cam if others_with_this_cam else ''
+    info_about_shot += others_with_this_lens if others_with_this_lens else ''
     answer.append(info_about_shot)
-    return answer, camera_info
+    return [answer, camera_info]
 
 
 @bot.message_handler(content_types=['document'])  # receive file
@@ -436,10 +460,12 @@ def handle_image(message):
     user_file = BytesIO(r.content)  # Get file-like object of user's photo
 
     # Get coordinates
-    answer, cam_info = read_exif(user_file, message)
-    if not answer:
+    read_exif_result = read_exif(user_file, message)
+    if not read_exif_result:
         bot.reply_to(message, lang_msgs[get_user_lang(chat_id)]['no_exif'])
-    elif len(answer) == 3:  # Sent location and info back to user
+
+    answer, cam_info = read_exif_result
+    if len(answer) == 3:  # Sent location and info back to user
         lat, lon = answer[0], answer[1]
         bot.send_location(chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[2])
@@ -462,19 +488,22 @@ def handle_image(message):
         save_camera_info(cam_info, message)
 
 
-# If bot crashes, try to restart and send me a message
-def telegram_polling(state):
-    try:
-        bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
-        if state == 'recovering':
-            bot.send_message(config.me, text='Bot has restarted after critical error.')
-    except:
-        # db_connector.disconnect()
-        # log.warning('Bot crashed with:\n' + traceback.format_exc())
-        bot.stop_polling()
-        time.sleep(5)
-        telegram_polling('recovering')
+bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
+# # If bot crashes, try to restart and send me a message
+# def telegram_polling(state):
+#     try:
+#         bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
+#         if state == 'recovering':
+#             bot.send_message(config.me, text='Bot has restarted after critical error.')
+#     except:
+#         # db_connector.disconnect()
+#         # log.warning('Bot crashed with:\n' + traceback.format_exc())
+#         bot.stop_polling()
+#         for i in range(30, 0, -1):
+#             print(str(i) + ' seconds to restart...')
+#             time.sleep(1)
+#         telegram_polling('recovering')
 
-
-if __name__ == '__main__':
-    telegram_polling('OK')
+#
+# if __name__ == '__main__':
+#     telegram_polling('OK')
