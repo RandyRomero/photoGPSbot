@@ -186,20 +186,17 @@ def cache_number_device_owners(func, cache_time):
         nonlocal result
         nonlocal when_was_called
 
+        # It's high time to call the function instead of cache
+        # if countdown went off or if function has not been called yet.
         high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
         if not when_was_called or high_time or gadget_name not in result:
-            print(result)
-            if gadget_name not in result:
-                log.debug(gadget_name + ' not in cache')
-
             when_was_called = datetime.now()
             result[gadget_name] = func(gadget_name, device_type, chat_id)
-            print(result)
             return result[gadget_name]
         else:
             log.info('Returning cached result of ' + func.__name__)
             time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
-            log.debug('Time to reevaluate result is {}'.format(time_left))
+            log.debug('Time to reevaluate result of {} is {}'.format( func.__name__, time_left))
             return result[gadget_name]
 
     return func_launcher
@@ -232,7 +229,7 @@ def cache_func(func, cache_time):
         else:
             log.debug('Return cached result of {}...'.format(func.__name__))
             time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
-            log.debug('Time to reevaluate result is {}'.format(time_left))
+            log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
             return result
 
     return function_launcher
@@ -274,6 +271,8 @@ def exif_to_dd(data, chat_id):
     if lat is False or lon is False:
         return [lang_msgs[get_user_lang(chat_id)]['bad_gps']]
     else:
+        log.debug(lat)
+        log.debug(lon)
         return [lat, lon]
 
 
@@ -354,13 +353,11 @@ get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
 
 # TODO Make function that returns how many other users have the same camera/smartphone/lens
 def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
-    log.debug('Check how many users also have this camera and lens...')
-    log.debug(gadget_name)
+    log.debug('Check how many users also have {}...'.format(gadget_name))
     answer = ''
 
     query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(device_type, gadget_name)
     row = cursor.execute(query)
-    log.debug('row: ' + str(row))
     if not row:
         return None
     if device_type == 'camera_name':
@@ -368,7 +365,6 @@ def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
     elif device_type == 'lens_name':
         answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row) + '.'
 
-    # log.debug('Answer: ' + answer)
     return answer
 
 
