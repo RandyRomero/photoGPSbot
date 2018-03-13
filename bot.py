@@ -39,9 +39,48 @@ cursor = db.cursor()
 user_lang = {}
 
 
-# TODO Make caching for user languages
-def load_last_user_languages(message):
-    pass
+def load_last_user_languages(max_users):
+    """
+    Function that caching user-lang pairs of last active users from database to pc memory
+    :param max_users: number of entries to be cached
+    :return: True if it complete work without errors, False otherwise
+    """
+
+    global user_lang
+    log.debug('Caching users\' languages from DB...')
+
+    # Select id of last active users
+    query = ("SELECT chat_id "
+             "FROM photo_queries_table "
+             "GROUP BY chat_id "
+             "ORDER BY MAX(time) "
+             "DESC LIMIT {};".format(max_users))
+
+    log.info('Figure out last active users...')
+    row = cursor.execute(query)
+    if row:
+        last_active_users_tuple_of_tuples = cursor.fetchall()
+        # Make list out of tuple of tuples that is returned by MySQL
+        last_active_users = [chat_id[0] for chat_id in last_active_users_tuple_of_tuples]
+    else:
+        log.warning('There are no last active users')
+        return False
+
+    log.debug('Downloading languages for last active users from DB...')
+    query = "SELECT chat_id, lang FROM user_lang_table WHERE chat_id in {};".format(tuple(last_active_users))
+    row = None
+    row = cursor.execute(query)
+    if row:
+        languages_of_users = cursor.fetchall()
+        log.debug('Uploading users\' languages into memory...')
+        for line in languages_of_users:
+            log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
+            user_lang[line[0]] = line[1]
+        log.debug('Done')
+        return True
+    else:
+        log.warning('There are now entries about user languages in database.')
+        return False
 
 
 def set_user_language(chat_id, lang):
@@ -482,6 +521,14 @@ def handle_image(message):
                                       message.from_user.id))
         log.info(log_msg)
         save_camera_info(cam_info, message)
+
+
+# I think you can safely cache several hundred or thousand of user-lang pairs without consuming to much memory,
+# but for development purpose I will set it to some minimum to be sure that calling to DB works properly
+if load_last_user_languages(5):
+    log.info('Users languages were cached.')
+else:
+    log.warning('Couldn\'t cache users\' languages.')
 
 
 bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
