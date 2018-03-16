@@ -428,12 +428,12 @@ def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
 
     query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(device_type, gadget_name)
     row = cursor.execute(query)
-    if not row:
+    if not row or row < 2:
         return None
     if device_type == 'camera_name':
-        answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row) + '.\n'
+        answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row-1) + '.\n'
     elif device_type == 'lens_name':
-        answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row) + '.'
+        answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row-1) + '.'
 
     return answer
 
