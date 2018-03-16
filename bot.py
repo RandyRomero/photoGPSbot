@@ -17,7 +17,8 @@ from language_pack import lang_msgs
 import db_connector
 import MySQLdb
 from datetime import datetime, timedelta
-import time
+from geopy.geocoders import Nominatim
+from urllib.request import Request
 
 log.info('Starting photoGPSbot...')
 log.info('Cleaning log folder...')
@@ -109,7 +110,6 @@ def get_user_lang(chat_id):
         try:
             row = cursor.execute(query)
         except (MySQLdb.Error, MySQLdb.Warning) as e:
-            # If there is something wrong with database - just set default language to be English
             lang = 'en-US'
             user_lang[chat_id] = lang
             return lang
@@ -274,6 +274,38 @@ def cache_func(func, cache_time):
     return function_launcher
 
 
+def get_address(latitude, longitude):
+    # Get address as a string by coordinats from photo that user sent to bot
+    log.info('Getting address from coordinates...')
+
+    def get_geolocator():
+        # Workaround of one of geopy current bugs
+        # Courtesy of
+        # https://github.com/geopy/geopy/issues/262#issuecomment-368605742
+        geolocator = Nominatim()
+
+        requester = geolocator.urlopen
+
+        def requester_hack(req, **kwargs):
+            req = Request(url=req, headers=geolocator.headers)
+            return requester(req, **kwargs)
+
+        geolocator.urlopen = requester_hack
+        return geolocator
+
+    coordinates = "{}, {}".format(latitude, longitude)
+    try:
+        location = get_geolocator().reverse(coordinates)
+        raw_address = location.raw['address']
+        for key, value in raw_address.items():
+            print('{}: {}'.format(key, value))
+        return location.address
+    except:
+        log.error('Get address failed!.')
+        log.error(traceback.format_exc())
+        return ''
+
+
 def exif_to_dd(data, chat_id):
     # Convert exif gps to format that accepts Telegram (and Google Maps for example)
 
@@ -285,7 +317,7 @@ def exif_to_dd(data, chat_id):
         lon = data['GPS GPSLongitude']
     except KeyError:
         log.info('This picture doesn\'t contain coordinates.')
-        return [lang_msgs[get_user_lang(chat_id)]['no_gps']]
+        return lang_msgs[get_user_lang(chat_id)]['no_gps']
         # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     # convert ifdtag from exifread module to decimal degree format of coordinate
@@ -310,9 +342,9 @@ def exif_to_dd(data, chat_id):
     if lat is False or lon is False:
         return [lang_msgs[get_user_lang(chat_id)]['bad_gps']]
     else:
-        log.debug(lat)
-        log.debug(lon)
-        return [lat, lon]
+        address = get_address(lat, lon)
+        address = address if address else ''
+        return [lat, lon, address]
 
 
 def check_camera_tags(tags):
@@ -390,7 +422,6 @@ get_most_popular_cams_cached = cache_func(get_most_popular_gadgets, 5)
 get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
 
 
-# TODO Make function that returns how many other users have the same camera/smartphone/lens
 def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
     log.debug('Check how many users also have {}...'.format(gadget_name))
     answer = ''
@@ -442,7 +473,14 @@ def read_exif(image, message):
         return False
 
     # Convert EXIF data about location to decimal degrees
-    answer.extend(exif_to_dd(exif, chat_id))
+    exif_converter_result = exif_to_dd(exif, chat_id)
+    if isinstance(exif_converter_result, list):
+        *coordinates, address = exif_converter_result
+        answer.extend(coordinates)
+    else:
+        address = ''
+        # Return user message that photo doesn't have exif info
+        answer.append(exif_converter_result)
 
     # Get necessary tags from EXIF data
     date_time = exif.get('EXIF DateTimeOriginal', None)
@@ -465,10 +503,11 @@ def read_exif(image, message):
     camera_info = camera, lens
 
     info_about_shot = ''
-    for tag, item in zip(lang_msgs[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens]):
+    for tag, item in zip(lang_msgs[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens, address]):
         if item:
-            info_about_shot += tag + item + '\n'
+            info_about_shot += '*{}*: {}\n'.format(tag, item)
 
+    # info_about_shot += address if address else ''
     info_about_shot += others_with_this_cam if others_with_this_cam else ''
     info_about_shot += others_with_this_lens if others_with_this_lens else ''
     answer.append(info_about_shot)
@@ -496,14 +535,18 @@ def handle_image(message):
 
     # Get coordinates
     read_exif_result = read_exif(user_file, message)
+
+    # Send to user message that there is no EXIF data in his picture
     if not read_exif_result:
         bot.reply_to(message, lang_msgs[get_user_lang(chat_id)]['no_exif'])
+        return
 
     answer, cam_info = read_exif_result
-    if len(answer) == 3:  # Sent location and info back to user
-        lat, lon = answer[0], answer[1]
+    # Send location and info about shot back to user
+    if len(answer) == 3:
+        lat, lon, address = answer
         bot.send_location(chat_id, lat, lon, live_period=None)
-        bot.reply_to(message, text=answer[2])
+        bot.reply_to(message, text=answer[2], parse_mode='Markdown')
         log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
                    '{} ID: {}'.format(message.from_user.first_name,
                                       message.from_user.last_name,
@@ -512,8 +555,10 @@ def handle_image(message):
 
         log.info(log_msg)
         save_camera_info(cam_info, message)
+
+    # Sent to user only info about shot because there is no gps coordinates in his shot
     else:
-        bot.reply_to(message, answer[0] + '\n' + answer[1])
+        bot.reply_to(message, answer[0] + '\n' + answer[1], parse_mode='Markdown')
         log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
                    '{} ID: {}'.format(message.from_user.first_name,
                                       message.from_user.last_name,
