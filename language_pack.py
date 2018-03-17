@@ -41,7 +41,7 @@ lang_msgs = {
         'camera_info': ['Date', 'Camera brand', 'Lens brand', 'Address'],
         'camera_users': 'Number of users of the @pohotogpsbot with this camera: ',
         'lens_users': 'Number of users of the @photogpsbot with this lens: ',
-        'top_cams': 'The most popular cameras/smartphones.',
+        'top_cams': 'The most popular cameras/smartphones',
         'top_lens': 'The most popular lens',
         'oops': 'This feature is coming soon. But if you send me a photo (as a file), I will send you back the location'
                 ' where it was taken',
