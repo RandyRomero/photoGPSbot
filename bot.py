@@ -18,7 +18,6 @@ import db_connector
 import MySQLdb
 from datetime import datetime, timedelta
 from geopy.geocoders import Nominatim
-from urllib.request import Request
 
 log.info('Starting photoGPSbot...')
 log.info('Cleaning log folder...')
@@ -276,34 +275,21 @@ def cache_func(func, cache_time):
 
 def get_address(latitude, longitude):
     # Get address as a string by coordinats from photo that user sent to bot
-    log.info('Getting address from coordinates...')
-
-    def get_geolocator():
-        # Workaround of one of geopy current bugs
-        # Courtesy of
-        # https://github.com/geopy/geopy/issues/262#issuecomment-368605742
-        geolocator = Nominatim()
-
-        requester = geolocator.urlopen
-
-        def requester_hack(req, **kwargs):
-            req = Request(url=req, headers=geolocator.headers)
-            return requester(req, **kwargs)
-
-        geolocator.urlopen = requester_hack
-        return geolocator
 
     coordinates = "{}, {}".format(latitude, longitude)
+    log.info('Getting address from coordinates {}...'.format(coordinates))
+    geolocator = Nominatim()
+
     try:
-        location = get_geolocator().reverse(coordinates)
+        location = geolocator.reverse(coordinates)
         raw_address = location.raw['address']
         for key, value in raw_address.items():
-            print('{}: {}'.format(key, value))
-        return location.address
+            log.debug('{}: {}'.format(key, value))
+        return location.address, raw_address['country']
     except:
         log.error('Get address failed!.')
         log.error(traceback.format_exc())
-        return ''
+        return False
 
 
 def exif_to_dd(data, chat_id):
@@ -342,9 +328,7 @@ def exif_to_dd(data, chat_id):
     if lat is False or lon is False:
         return [lang_msgs[get_user_lang(chat_id)]['bad_gps']]
     else:
-        address = get_address(lat, lon)
-        address = address if address else ''
-        return [lat, lon, address]
+        return lat, lon
 
 
 def check_camera_tags(tags):
@@ -464,23 +448,44 @@ def save_camera_info(data, message):
             return
 
 
-def read_exif(image, message):
-    chat_id = message.chat.id
+def read_exif(image, chat_id):
+    """
+    # Get various info about photo that user sent: time when picture was taken, location as longitude and latitude,
+    # post address, type of camera/smartphone and lens, how many people have the same camera/lens.
+
+    :param image: actual photo that user sent to bot
+    :param chat_id: user id who ent photo and who bot should answer to
+    :return: list with three values. First value called answer is also list that contains different information
+    about picture. First value of answer is either tuple with coordinates from photo or string message
+    that photo doesn't contain coordinates. Second value of answer is string with photo details: time, camera, lens
+    from exif and, if any, messages how many other bot users have the same camera/lens.
+    Second value in list that this function returns is camera info, which is list with one or two items: first is
+    name of the samera/smartphone, second, if exists, name of the lens.
+    Third  value in list that this function returns is a city where picture was taken.
+
+    """
+    # TODO describe read_exif function
     answer = []
     exif = exifread.process_file(image, details=False)
-    if len(exif.keys()) < 1:
+    if not len(exif.keys()):
         log.info('This picture doesn\'t contain EXIF.')
         return False
 
     # Convert EXIF data about location to decimal degrees
     exif_converter_result = exif_to_dd(exif, chat_id)
-    if isinstance(exif_converter_result, list):
-        *coordinates, address = exif_converter_result
-        answer.extend(coordinates)
+    if isinstance(exif_converter_result, tuple):
+        coordinates = exif_converter_result
+        answer.append(coordinates)
+        get_address_result = get_address(*coordinates)
+        try:
+            address, city = get_address_result
+        except TypeError:
+            address, city = '', False
     else:
-        address = ''
-        # Return user message that photo doesn't have exif info
-        answer.append(exif_converter_result)
+        # Add user message that photo doesn't have info about location
+        address, city = '', None
+        user_msg = exif_converter_result
+        answer.append(user_msg)
 
     # Get necessary tags from EXIF data
     date_time = exif.get('EXIF DateTimeOriginal', None)
@@ -507,11 +512,11 @@ def read_exif(image, message):
         if item:
             info_about_shot += '*{}*: {}\n'.format(tag, item)
 
-    # info_about_shot += address if address else ''
     info_about_shot += others_with_this_cam if others_with_this_cam else ''
     info_about_shot += others_with_this_lens if others_with_this_lens else ''
     answer.append(info_about_shot)
-    return [answer, camera_info]
+
+    return [answer, camera_info, city]
 
 
 @bot.message_handler(content_types=['document'])  # receive file
@@ -534,19 +539,24 @@ def handle_image(message):
     user_file = BytesIO(r.content)  # Get file-like object of user's photo
 
     # Get coordinates
-    read_exif_result = read_exif(user_file, message)
+    read_exif_result = read_exif(user_file, chat_id)
 
     # Send to user message that there is no EXIF data in his picture
     if not read_exif_result:
         bot.reply_to(message, lang_msgs[get_user_lang(chat_id)]['no_exif'])
         return
 
-    answer, cam_info = read_exif_result
+    answer, cam_info, city = read_exif_result
     # Send location and info about shot back to user
-    if len(answer) == 3:
-        lat, lon, address = answer
+    # if len(answer[0]) == 2:
+    #     log.debug(answer[0])
+
+    if isinstance(answer[0], tuple):
+        lat, lon = answer[0]
+        # log.debug(lat)
+        # log.debud(lon)
         bot.send_location(chat_id, lat, lon, live_period=None)
-        bot.reply_to(message, text=answer[2], parse_mode='Markdown')
+        bot.reply_to(message, text=answer[1], parse_mode='Markdown')
         log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
                    '{} ID: {}'.format(message.from_user.first_name,
                                       message.from_user.last_name,
@@ -555,17 +565,20 @@ def handle_image(message):
 
         log.info(log_msg)
         save_camera_info(cam_info, message)
+        return
 
     # Sent to user only info about shot because there is no gps coordinates in his shot
-    else:
-        bot.reply_to(message, answer[0] + '\n' + answer[1], parse_mode='Markdown')
-        log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
-                   '{} ID: {}'.format(message.from_user.first_name,
-                                      message.from_user.last_name,
-                                      message.from_user.username,
-                                      message.from_user.id))
-        log.info(log_msg)
-        save_camera_info(cam_info, message)
+    # user_msg consists of message that there is no info about location and messages with photo details
+    user_msg = '{}\n{}'.format(answer[0], answer[1])
+
+    bot.reply_to(message, user_msg, parse_mode='Markdown')
+    log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
+               '{} ID: {}'.format(message.from_user.first_name,
+                                  message.from_user.last_name,
+                                  message.from_user.username,
+                                  message.from_user.id))
+    log.info(log_msg)
+    save_camera_info(cam_info, message)
 
 
 # I think you can safely cache several hundred or thousand of user-lang pairs without consuming to much memory,
