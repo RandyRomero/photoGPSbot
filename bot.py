@@ -274,6 +274,7 @@ def cache_func(func, cache_time):
 
 
 def get_address(latitude, longitude, lang):
+    start_time = datetime.now()
     # Get address as a string by coordinats from photo that user sent to bot
 
     coordinates = "{}, {}".format(latitude, longitude)
@@ -282,12 +283,23 @@ def get_address(latitude, longitude, lang):
 
     try:
         location = geolocator.reverse(coordinates, language=lang)
-        raw_address = location.raw['address']
-        for key, value in raw_address.items():
-            log.debug('{}: {}'.format(key, value))
-        return location.address, raw_address['country']
+        if lang == 'en':
+            country_en = location.raw['address']['country']
+            second_lang = 'ru'
+            location2 = geolocator.reverse(coordinates, language=second_lang)
+            location2_raw = location2.raw
+            country_ru = location2_raw['address']['country']
+        else:
+            country_ru = location.raw['address']['country']
+            second_lang = 'en'
+            location2 = geolocator.reverse(coordinates, language=second_lang)
+            location2_raw = location2.raw
+            country_en = location2_raw['address']['country']
+        log.debug("It took {} seconds for get_address function to do the job".format((datetime.now() -
+                                                                                      start_time).seconds))
+        return location.address, (country_en, country_ru)
     except:
-        log.error('Get address failed!.')
+        log.error('Getting address failed!')
         log.error(traceback.format_exc())
         return False
 
@@ -443,8 +455,9 @@ def save_user_query_info(data, message, country=None):
         log.info('Adding new entry to photo_queries_table...')
         if country:
             query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
-                     ' username, country) VALUES ({}, "{}", "{}", "{}", "{}", "{}", '
-                     '"{}")'.format(chat_id, camera_name, lens_name, first_name, last_name, username, country))
+                     ' username, country_en, country_ru) VALUES ({}, "{}", "{}", "{}", "{}", "{}", '
+                     '"{}", "{}")'.format(chat_id, camera_name, lens_name, first_name, last_name, username,
+                                          country[0], country[1]))
         else:
             query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
                      ' username)VALUES ({}, "{}", "{}", "{}", "{}", '
