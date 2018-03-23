@@ -18,8 +18,9 @@ lang_msgs = {
         'camera_info': ['Дата съёмки', 'Камера', 'Объектив', 'Адрес'],
         'camera_users': 'Пользователей @photogpsbot c такой же камерой: ',
         'lens_users': 'Пользователей @photogpsbot c таким же объективом: ',
-        'top_cams': 'Самые популярные смартфоны/камеры бота',
-        'top_lens': 'Самые популярные объективы бота',
+        'top_cams': 'Самые популярные смартфоны/камеры пользователей бота',
+        'top_lens': 'Самые популярные объективы пользователей бота',
+        'top_countries': 'Самые популярные страны пользователей бота',
         'oops': 'Упс! Эта фича пока еще в разработке. Но, если ты пришлёшь мне фотографию, '
                 'я отправлю тебе карту с указанием, где эта фотография была сделана',
         'no_top': 'Список пуст - прекрасный шанс возглавить его!',
@@ -43,6 +44,7 @@ lang_msgs = {
         'lens_users': 'Number of users of the @photogpsbot with this lens: ',
         'top_cams': 'The most popular cameras/smartphones',
         'top_lens': 'The most popular lens',
+        'top_countries': 'The most popular countries',
         'oops': 'This feature is coming soon. But if you send me a photo (as a file), I will send you back the location'
                 ' where it was taken',
         'no_top': 'The list is empty - you can be first!',

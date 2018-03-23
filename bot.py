@@ -99,12 +99,9 @@ def get_user_lang(chat_id):
     :param chat_id: telegram message object
     :return: language tag like ru-RU, en-US
     """
-    # log.debug('################ get user language debug info ################')
     log.info('Defining user {} language...'.format(chat_id))
-    # log.debug('Looking up in memory...')
     lang = user_lang.get(chat_id, None)
     if not lang:
-        # log.debug('There is no entry about user {} language in memory. Looking up in database...'.format(chat_id))
         query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
         try:
             row = cursor.execute(query)
@@ -115,7 +112,6 @@ def get_user_lang(chat_id):
 
         if row:
             lang = cursor.fetchone()[0]
-            # log.debug('Language of user {} is {}. Was found in database.'.format(chat_id, lang))
             user_lang[chat_id] = lang
         else:
             lang = 'en-US'
@@ -136,6 +132,7 @@ def change_user_language(chat_id):
         set_user_language(chat_id, new_lang)
         return True
     except:
+        log.error(traceback.format_exc())
         return False
 
 
@@ -155,6 +152,7 @@ def create_main_keyboard(arg):
     markup.row('Русский/English')
     markup.row(lang_msgs[get_user_lang(chat_id)]['top_cams'])
     markup.row(lang_msgs[get_user_lang(chat_id)]['top_lens'])
+    markup.row(lang_msgs[get_user_lang(chat_id)]['top_countries'])
     bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['menu_header'], reply_markup=markup)
 
 
@@ -180,6 +178,11 @@ def handle_menu_response(message):
         log.info('User {} asked for top lens'.format(chat_id))
         bot.send_message(chat_id, text=get_most_popular_lens_cached('lens_name', chat_id))
         log.info('Returned to {} list of most popular cams'.format(chat_id))
+
+    elif message.text == lang_msgs[get_user_lang(chat_id)]['top_countries']:
+        log.info('User {} asked for top countries'.format(chat_id))
+        table_name = 'country_ru' if get_user_lang(chat_id) == 'ru-RU' else 'country_en'
+        bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
 
     elif message.text == config.abort:
         bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['bye'])
@@ -371,51 +374,57 @@ def check_camera_tags(tags):
     return checked_tags
 
 
-def get_most_popular_gadgets(cam_or_lens, chat_id):
+def get_most_popular_items(item_type, chat_id):
     """
     Get most common cameras/lenses from database and make list of them
-    :param cam_or_lens: string with column name to choose between cameras and lenses
-    :param chat_id: telegram object message
-    :return: string which is either list of most common cameras/lenses or user message which states that list is empty
+    :param item_type: string with column name to choose between cameras, lenses and countries
+    :param chat_id: id of user derived from telegram object message
+    :return: string which is either list of most common cameras/lenses/countries or message which states that list is
+    empty
     """
 
-    # Make python list to be string list with indexes and new line characters
+    # Make python list to be string roster with indexes and new line characters like:
+    # 1. Canon 80D
+    # 2. iPhone 4S
     def list_to_ordered_str_list(list_of_gadgets):
+        log.debug(list_of_gadgets)
         string_roaster = ''
         index = 1
-        for gadget in list_of_gadgets:
-            string_roaster += '{}. {}\n'.format(index, gadget)
+        for item in list_of_gadgets:
+            if not item[0]:
+                continue
+            string_roaster += '{}. {}\n'.format(index, item[0])
             index += 1
         return string_roaster
 
     log.debug('Evaluating most popular gadgets...')
-    all_last_month_gadgets = {}
     month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
-    query = 'SELECT {} FROM photo_queries_table WHERE time > "{}"'.format(cam_or_lens, month_ago)
-    rows = cursor.execute(query)
-    if not rows:
-        return lang_msgs[get_user_lang(chat_id)]['no_top']
-    # Make dictionary to count how may occurrences of each camera or lens we have in our database table
-    while True:
-        try:
-            item = cursor.fetchone()[0]
-            if item == 'None':  # Skip empty cells
-                continue
-            all_last_month_gadgets[item] = 1 if item not in all_last_month_gadgets else all_last_month_gadgets[item] + 1
-        except TypeError:  # If there is nothing to catch from cursor anymore
-            # Sort dictionary keys by values
-            most_popular_gadgets = sorted(all_last_month_gadgets, key=lambda x: all_last_month_gadgets[x], reverse=True)
-            len_most_popular_gadgets = len(most_popular_gadgets)
-            log.info('There are {} gadgets in database since {}'.format(len_most_popular_gadgets, month_ago))
-            if len_most_popular_gadgets > 30:
-                return list_to_ordered_str_list(most_popular_gadgets[:30])
-            else:
-                return list_to_ordered_str_list(most_popular_gadgets)
+
+    # This query returns item types in order where the first one item has the highest number of occurrences
+    # in a given column
+    query = ('SELECT {0} FROM photo_queries_table WHERE time > "{1}" GROUP BY {0} '
+             'ORDER BY count({0}) DESC'.format(item_type, month_ago))
+    try:
+        rows = cursor.execute(query)
+        if not rows:
+            log.info('Can\'t evaluate a list of the most popular items')
+            return lang_msgs[get_user_lang(chat_id)]['no_top']
+
+        popular_items = cursor.fetchall()
+        if len(popular_items) > 30:
+            log.info('Finish evalating the most popular items')
+            return list_to_ordered_str_list(popular_items[:30])
+        else:
+            log.info('Finish evalating the most popular items')
+            return list_to_ordered_str_list(popular_items)
+    except (MySQLdb.Error, MySQLdb.Warning) as e:
+        log.error(e)
 
 
 # Make closures
-get_most_popular_cams_cached = cache_func(get_most_popular_gadgets, 5)
-get_most_popular_lens_cached = cache_func(get_most_popular_gadgets, 5)
+get_most_popular_cams_cached = cache_func(get_most_popular_items, 5)
+get_most_popular_lens_cached = cache_func(get_most_popular_items, 5)
+get_most_popular_countries_cached = cache_func(get_most_popular_items, 5)
 
 
 def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
@@ -486,7 +495,6 @@ def read_exif(image, chat_id):
     Third  value in list that this function returns is a country where picture was taken.
 
     """
-    # TODO describe read_exif function
     answer = []
     exif = exifread.process_file(image, details=False)
     if not len(exif.keys()):
