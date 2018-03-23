@@ -172,17 +172,18 @@ def handle_menu_response(message):
     elif message.text == lang_msgs[get_user_lang(chat_id)]['top_cams']:
         log.info('User {} asked for top cams'.format(chat_id))
         bot.send_message(chat_id, text=get_most_popular_cams_cached('camera_name', chat_id))
-        log.info('Returned to {} list of most popular cams.'.format(chat_id))
+        log.info('List of most popular cameras has been returned to {} '.format(chat_id))
 
     elif message.text == lang_msgs[get_user_lang(chat_id)]['top_lens']:
         log.info('User {} asked for top lens'.format(chat_id))
         bot.send_message(chat_id, text=get_most_popular_lens_cached('lens_name', chat_id))
-        log.info('Returned to {} list of most popular cams'.format(chat_id))
+        log.info('List of most popular lens has been returned to {} '.format(chat_id))
 
     elif message.text == lang_msgs[get_user_lang(chat_id)]['top_countries']:
         log.info('User {} asked for top countries'.format(chat_id))
         table_name = 'country_ru' if get_user_lang(chat_id) == 'ru-RU' else 'country_en'
         bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
+        log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
     elif message.text == config.abort:
         bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['bye'])
@@ -387,7 +388,6 @@ def get_most_popular_items(item_type, chat_id):
     # 1. Canon 80D
     # 2. iPhone 4S
     def list_to_ordered_str_list(list_of_gadgets):
-        log.debug(list_of_gadgets)
         string_roaster = ''
         index = 1
         for item in list_of_gadgets:
@@ -415,7 +415,7 @@ def get_most_popular_items(item_type, chat_id):
             log.info('Finish evalating the most popular items')
             return list_to_ordered_str_list(popular_items[:30])
         else:
-            log.info('Finish evalating the most popular items')
+            log.info('Finish evaluating the most popular items')
             return list_to_ordered_str_list(popular_items)
     except (MySQLdb.Error, MySQLdb.Warning) as e:
         log.error(e)
@@ -451,10 +451,12 @@ get_number_all_owners_of_device = cache_number_device_owners(get_number_users_by
 def save_user_query_info(data, message, country=None):
     global db
     camera_name, lens_name = data
+    camera_name = 'NULL' if not camera_name else '{0}{1}{0}'.format('"', camera_name)
+    lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
     chat_id = message.chat.id
-    first_name = message.from_user.first_name
-    last_name = message.from_user.last_name
-    username = message.from_user.username
+    first_name = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.first_name)
+    last_name = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.last_name)
+    username = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.username)
 
     if not camera_name:
         log.warning('Something went wrong. There should be camera name to store it in database but there isn\'t')
@@ -462,15 +464,12 @@ def save_user_query_info(data, message, country=None):
 
     try:
         log.info('Adding new entry to photo_queries_table...')
-        if country:
-            query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
-                     ' username, country_en, country_ru) VALUES ({}, "{}", "{}", "{}", "{}", "{}", '
-                     '"{}", "{}")'.format(chat_id, camera_name, lens_name, first_name, last_name, username,
-                                          country[0], country[1]))
-        else:
-            query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
-                     ' username)VALUES ({}, "{}", "{}", "{}", "{}", '
-                     '"{}")'.format(chat_id, camera_name, lens_name, first_name, last_name, username))
+        if not country:
+            country = ["NULL", "NULL"]
+        query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
+                 ' username, country_en, country_ru) VALUES ({}, {}, {}, {}, {}, {}, '
+                 '"{}", "{}")'.format(chat_id, camera_name, lens_name, first_name, last_name, username,
+                                      country[0], country[1]))
 
         cursor.execute(query)
         db.commit()
