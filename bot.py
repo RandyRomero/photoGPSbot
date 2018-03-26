@@ -97,7 +97,7 @@ def get_user_lang(chat_id):
     Function to look up user language in dictionary (which is like cache), than in database (if it is not in dict),
     then set language according to language code from telegram message object
     :param chat_id: telegram message object
-    :return: language tag like ru-RU, en-US
+    :return: language tag like ru-RU, en-US as a string
     """
     log.info('Defining user {} language...'.format(chat_id))
     lang = user_lang.get(chat_id, None)
@@ -106,6 +106,7 @@ def get_user_lang(chat_id):
         try:
             row = cursor.execute(query)
         except (MySQLdb.Error, MySQLdb.Warning) as e:
+            log.warning(e)
             lang = 'en-US'
             user_lang[chat_id] = lang
             return lang
@@ -219,27 +220,31 @@ def dedupe_string(string):
     return deduped_string.rstrip()
 
 
-def cache_number_device_owners(func, cache_time):
+def cache_number_users_with_same_feature(func, cache_time):
     when_was_called = None
     result = {}
 
-    def func_launcher(gadget_name, device_type, chat_id):
+    def func_launcher(feature_name, device_type, chat_id):
         nonlocal func
         nonlocal result
         nonlocal when_was_called
 
-        # It's high time to call the function instead of cache
-        # if countdown went off or if function has not been called yet.
+        # Add language tag to feature name to avoid returning to user cached result in another language
+        feature_name_with_lang = '{}_{}'.format(feature_name,  get_user_lang(chat_id))
+
+        # It's high time to call reevaluate result instead of just looking up in cache if countdown went off, if
+        # function has not been called yet, if result for feature (like camera, lens or country) not in cache
         high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
-        if not when_was_called or high_time or gadget_name not in result:
+        if not when_was_called or high_time or feature_name_with_lang not in result:
             when_was_called = datetime.now()
-            result[gadget_name] = func(gadget_name, device_type, chat_id)
-            return result[gadget_name]
+
+            result[feature_name_with_lang] = func(feature_name, device_type, chat_id)
+            return result[feature_name_with_lang]
         else:
             log.info('Returning cached result of ' + func.__name__)
             time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
-            log.debug('Time to reevaluate result of {} is {}'.format( func.__name__, time_left))
-            return result[gadget_name]
+            log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
+            return result[feature_name_with_lang]
 
     return func_launcher
 
@@ -412,7 +417,7 @@ def get_most_popular_items(item_type, chat_id):
 
         popular_items = cursor.fetchall()
         if len(popular_items) > 30:
-            log.info('Finish evalating the most popular items')
+            log.info('Finish evaluating the most popular items')
             return list_to_ordered_str_list(popular_items[:30])
         else:
             log.info('Finish evaluating the most popular items')
@@ -427,24 +432,33 @@ get_most_popular_lens_cached = cache_func(get_most_popular_items, 5)
 get_most_popular_countries_cached = cache_func(get_most_popular_items, 5)
 
 
-def get_number_users_by_gadget_name(gadget_name, device_type, chat_id):
-    log.debug('Check how many users also have {}...'.format(gadget_name))
+def get_number_users_by_feature(feature_name, feature_type, chat_id):
+    """
+    Get number of users that have same smartphone, camera, lens ir that have been to the same country
+    :param feature_name: string which is name of particular feature e.g. camera name our country name
+    :param feature_type: string which is basically name of the column in database
+    :param chat_id: integer which is ID of user
+    :return: string which is message to user
+    """
+    log.debug('Check how many users also have feature: {}...'.format(feature_name))
     answer = ''
-
-    query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(device_type, gadget_name)
+    query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(feature_type, feature_name)
     row = cursor.execute(query)
-    if not row or row < 2:
+    # Because 1 is yourself (but sometimes you can use it for debug
+    if not row or row < 1:
         return None
-    if device_type == 'camera_name':
-        answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row-1) + '.\n'
-    elif device_type == 'lens_name':
-        answer += lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row-1) + '.'
+    if feature_type == 'camera_name':
+        answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row-1) + '.'
+    elif feature_type == 'lens_name':
+        answer += '\n' + lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row-1) + '.'
+    elif feature_type == 'country_en':
+        answer += '\n' + lang_msgs[get_user_lang(chat_id)]['photos_from_country'] + str(row-1) + '.'
 
     return answer
 
 
 # Make closure which preservers result of the function in order not to call database too often
-get_number_all_owners_of_device = cache_number_device_owners(get_number_users_by_gadget_name, 30)
+get_number_users_with_same_feature = cache_number_users_with_same_feature(get_number_users_by_feature, 30)
 
 
 # Save camera info to database to collect statistics
@@ -455,8 +469,13 @@ def save_user_query_info(data, message, country=None):
     lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
     chat_id = message.chat.id
     first_name = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.first_name)
-    last_name = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.last_name)
-    username = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.username)
+    last_name = 'NULL' if not message.from_user.last_name else '{0}{1}{0}'.format('"', message.from_user.last_name)
+    username = 'NULL' if not message.from_user.username else '{0}{1}{0}'.format('"', message.from_user.username)
+    if not country:
+        country_en = country_ru = 'NULL'
+    else:
+        country_en = '{0}{1}{0}'.format('"', country[0])
+        country_ru = '{0}{1}{0}'.format('"', country[1])
 
     if not camera_name:
         log.warning('Something went wrong. There should be camera name to store it in database but there isn\'t')
@@ -464,13 +483,13 @@ def save_user_query_info(data, message, country=None):
 
     try:
         log.info('Adding new entry to photo_queries_table...')
-        if not country:
-            country = ["NULL", "NULL"]
+
         query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
                  ' username, country_en, country_ru) VALUES ({}, {}, {}, {}, {}, {}, '
-                 '"{}", "{}")'.format(chat_id, camera_name, lens_name, first_name, last_name, username,
-                                      country[0], country[1]))
+                 '{}, {})'.format(chat_id, camera_name, lens_name, first_name, last_name, username, country_en,
+                                  country_ru))
 
+        # log.debug(query)
         cursor.execute(query)
         db.commit()
     except (MySQLdb.Error, MySQLdb.Warning) as e:
@@ -510,7 +529,7 @@ def read_exif(image, chat_id):
         try:
             address, country = get_address_result
         except TypeError:
-            address, country = '', False
+            address, country = '', None
     else:
         # Add user message that photo doesn't have info about location
         address, country = '', None
@@ -533,8 +552,13 @@ def read_exif(image, chat_id):
     lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
 
     camera, lens = check_camera_tags([camera, lens])
-    others_with_this_cam = get_number_all_owners_of_device(camera, 'camera_name', chat_id)
-    others_with_this_lens = get_number_all_owners_of_device(lens, 'lens_name', chat_id) if lens else None
+    others_with_this_cam = get_number_users_with_same_feature(camera, 'camera_name', chat_id)
+    others_with_this_lens = get_number_users_with_same_feature(lens, 'lens_name', chat_id) if lens else None
+    others_from_this_country = (get_number_users_with_same_feature(country[0], 'country_en', chat_id)
+                                if country else None)
+    # log.debug(country)
+    # log.debug(others_from_this_country)
+
     camera_info = camera, lens
 
     info_about_shot = ''
@@ -544,6 +568,7 @@ def read_exif(image, chat_id):
 
     info_about_shot += others_with_this_cam if others_with_this_cam else ''
     info_about_shot += others_with_this_lens if others_with_this_lens else ''
+    info_about_shot += others_from_this_country if others_from_this_country else ''
     answer.append(info_about_shot)
 
     return [answer, camera_info, country]
@@ -583,8 +608,6 @@ def handle_image(message):
 
     if isinstance(answer[0], tuple):
         lat, lon = answer[0]
-        # log.debug(lat)
-        # log.debud(lon)
         bot.send_location(chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[1], parse_mode='Markdown')
         log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
