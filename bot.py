@@ -448,11 +448,12 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
     if not row or row < 1:
         return None
     if feature_type == 'camera_name':
-        answer += lang_msgs[get_user_lang(chat_id)]['camera_users'] + str(row-1) + '.'
+        # asterisks fro markdown - to make font bold
+        answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
-        answer += '\n' + lang_msgs[get_user_lang(chat_id)]['lens_users'] + str(row-1) + '.'
+        answer += '\n*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['lens_users'], str(row - 1))
     elif feature_type == 'country_en':
-        answer += '\n' + lang_msgs[get_user_lang(chat_id)]['photos_from_country'] + str(row-1) + '.'
+        answer += '\n*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
 
     return answer
 
