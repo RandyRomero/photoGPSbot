@@ -20,7 +20,6 @@ from datetime import datetime, timedelta
 from geopy.geocoders import Nominatim
 
 log.info('Starting photoGPSbot...')
-log.info('Cleaning log folder...')
 clean_log_folder(20)
 
 bot = telebot.TeleBot(config.token)
@@ -134,6 +133,7 @@ def change_user_language(chat_id):
         return True
     except:
         log.error(traceback.format_exc())
+        bot.send_message(config.me, text=traceback.format_exc())
         return False
 
 
@@ -188,7 +188,7 @@ def handle_menu_response(message):
         bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
         log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
-    elif message.text == config.abort:
+    elif message.text == "ciao" and chat_id == config.me:
         bot.send_message(chat_id, lang_msgs[current_user_lang]['bye'])
         turn_bot_off()
     else:
@@ -611,8 +611,6 @@ def handle_image(message):
 
     answer, cam_info, country = read_exif_result
     # Send location and info about shot back to user
-    # if len(answer[0]) == 2:
-    #     log.debug(answer[0])
 
     if isinstance(answer[0], tuple):
         lat, lon = answer[0]
