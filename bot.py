@@ -249,42 +249,45 @@ def cache_number_users_with_same_feature(func, cache_time):
     return func_launcher
 
 
-def cache_func(func, cache_time):
+def cache_most_popular_items(func, cache_time):
     """
     Function that prevent calling any given function more often that once in a cache_time.
-    It calls given function, then during next cache_times minute it will return cached result of a given function.
-    It should save some time.
+    It calls given function, then during next cache_time  it will return cached result of a given function.
+    Function call given function when: it hasn't been called before; cache_time is passed, user ask result in
+    another language.
 
-    :param func: some expensive function that we don't want to call to often because it can slow down the script
+    :param func: some expensive function that we don't want to call too often because it can slow down the script
     :param cache_time: minutes how much to wait between real func calling and returning cached result
     :return: wrapper that figure out when to call function and when to return cached result
     """
-    when_was_called = None  # initialize datetime object
-    result = None
+    when_was_called = None  # store time when given function was called last time
+    result = {}  # dictionary to store result where language of user is key and message for user is a value
 
-    def function_launcher(*args):
+    def function_launcher(item_type, chat_id):
         nonlocal func
         nonlocal result
         nonlocal when_was_called
+        lang = get_user_lang(chat_id)
 
-        # when_was_called is None only first time function if called
-        # Than it is needed to figure out how many time is left since given func was called last time
-        if not when_was_called or when_was_called + timedelta(minutes=cache_time) < datetime.now():
+        # evaluate boolean whether it is high time to call given function or not
+        high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
+        
+        if not result.get(lang, None) or not when_was_called or high_time:
             when_was_called = datetime.now()
-            result = func(*args)
-            return result
+            result[lang] = func(item_type, chat_id)
+            return result[lang]
         else:
             log.debug('Return cached result of {}...'.format(func.__name__))
             time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
             log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
-            return result
+            return result[lang]
 
     return function_launcher
 
 
 def get_address(latitude, longitude, lang):
     start_time = datetime.now()
-    # Get address as a string by coordinats from photo that user sent to bot
+    # Get address as a string by coordinates from photo that user sent to bot
 
     coordinates = "{}, {}".format(latitude, longitude)
     log.info('Getting address from coordinates {}...'.format(coordinates))
@@ -427,9 +430,9 @@ def get_most_popular_items(item_type, chat_id):
 
 
 # Make closures
-get_most_popular_cams_cached = cache_func(get_most_popular_items, 5)
-get_most_popular_lens_cached = cache_func(get_most_popular_items, 5)
-get_most_popular_countries_cached = cache_func(get_most_popular_items, 5)
+get_most_popular_cams_cached = cache_most_popular_items(get_most_popular_items, 5)
+get_most_popular_lens_cached = cache_most_popular_items(get_most_popular_items, 5)
+get_most_popular_countries_cached = cache_most_popular_items(get_most_popular_items, 5)
 
 
 def get_number_users_by_feature(feature_name, feature_type, chat_id):
