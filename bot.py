@@ -179,13 +179,13 @@ def get_user_lang(chat_id):
     return lang
 
 
-def change_user_language(chat_id):
-    curr_lang = get_user_lang(chat_id)
+def change_user_language(chat_id, curr_lang):
+    # curr_lang = get_user_lang(chat_id)
     new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
     log.info('Changing user {} language from {} to {}...'.format(chat_id, curr_lang, new_lang))
     try:
         set_user_language(chat_id, new_lang)
-        return True
+        return new_lang
     except:
         log.error(traceback.format_exc())
         bot.send_message(config.me, text=traceback.format_exc())
@@ -222,8 +222,9 @@ def handle_menu_response(message):
 
     if message.text == 'Русский/English':
 
-        if change_user_language(chat_id):
-            bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_success'])
+        current_user_lang = change_user_language(chat_id, current_user_lang)
+        if current_user_lang:
+            bot.send_message(chat_id, lang_msgs[current_user_lang]['switch_lang_success'])
             create_main_keyboard(chat_id)
         else:
             bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_failure'])
