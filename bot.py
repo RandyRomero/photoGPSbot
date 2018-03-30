@@ -134,6 +134,12 @@ def set_user_language(chat_id, lang):
     cursor.execute(query)
     db.commit()
     user_lang[chat_id] = lang
+
+    # Actually we cat set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
+    # this function working well
+    if len(user_lang) > 10:
+        clean_log_folder(2)
+
     log.info('User {} language was switched to {}'.format(chat_id, lang))
 
 
@@ -166,6 +172,9 @@ def get_user_lang(chat_id):
             cursor.execute(query)
             db.commit()
             user_lang[chat_id] = lang
+
+        if len(user_lang) > 10:
+            clean_log_folder(2)
 
     return lang
 
@@ -698,7 +707,7 @@ def handle_image(message):
 
 # I think you can safely cache several hundred or thousand of user-lang pairs without consuming to much memory,
 # but for development purpose I will set it to some minimum to be sure that calling to DB works properly
-if load_last_user_languages(5):
+if load_last_user_languages(10):
     log.info('Users languages were cached.')
 else:
     log.warning('Couldn\'t cache users\' languages.')
