@@ -524,9 +524,9 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
         # asterisks fro markdown - to make font bold
         answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
-        answer += '\n*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['lens_users'], str(row - 1))
+        answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['lens_users'], str(row - 1))
     elif feature_type == 'country_en':
-        answer += '\n*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
+        answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
 
     return answer
 
@@ -630,8 +630,6 @@ def read_exif(image, chat_id):
     others_with_this_lens = get_number_users_with_same_feature(lens, 'lens_name', chat_id) if lens else None
     others_from_this_country = (get_number_users_with_same_feature(country[0], 'country_en', chat_id)
                                 if country else None)
-    # log.debug(country)
-    # log.debug(others_from_this_country)
 
     camera_info = camera, lens
 
@@ -641,8 +639,8 @@ def read_exif(image, chat_id):
             info_about_shot += '*{}*: {}\n'.format(tag, item)
 
     info_about_shot += others_with_this_cam if others_with_this_cam else ''
-    info_about_shot += others_with_this_lens if others_with_this_lens else ''
-    info_about_shot += others_from_this_country if others_from_this_country else ''
+    info_about_shot += '\n' + others_with_this_lens if others_with_this_lens else ''
+    info_about_shot += '\n' + others_from_this_country if others_from_this_country else ''
     answer.append(info_about_shot)
 
     return [answer, camera_info, country]
