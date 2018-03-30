@@ -56,7 +56,13 @@ def load_last_user_languages(max_users):
              "DESC LIMIT {};".format(max_users))
 
     log.info('Figure out last active users...')
-    row = cursor.execute(query)
+    try:
+        row = cursor.execute(query)
+    except (MySQLdb.Error, MySQLdb.Warning) as e:
+        log.warning(e)
+        bot.send_message(config.me, text=e)
+        return False
+
     if row:
         last_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
@@ -65,13 +71,13 @@ def load_last_user_languages(max_users):
         log.warning('There are no last active users')
         return False
 
-    log.debug('Downloading languages for last active users from DB...')
+    log.debug('Downloading language preferences for {} last active users from DB...'.format(max_users))
+    # Select from db with language preferences languages for users who were active recently
     query = "SELECT chat_id, lang FROM user_lang_table WHERE chat_id in {};".format(tuple(last_active_users))
     row = None
     row = cursor.execute(query)
     if row:
         languages_of_users = cursor.fetchall()
-        log.debug('Uploading users\' languages into memory...')
         for line in languages_of_users:
             log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
             user_lang[line[0]] = line[1]
@@ -80,6 +86,46 @@ def load_last_user_languages(max_users):
     else:
         log.warning('There are now entries about user languages in database.')
         return False
+
+
+def clean_old_user_languages_from_memory(max_users):
+    # Function to clean RAM from language preferences of users who used a bot a long time ago
+
+    global user_lang
+
+    user_ids = tuple(user_lang.keys())
+    query = ('SELECT chat_id '
+             'FROM photo_queries_table '
+             'WHERE chat_id in {} '
+             'GROUP BY chat_id '
+             'ORDER BY MAX(time) '
+             'LIMIT {}'.format(user_ids, max_users))
+
+    log.info('Figuring out least active users...')
+    try:
+        row = cursor.execute(query)
+    except (MySQLdb.Error, MySQLdb.Warning) as e:
+        log.warning(e)
+        bot.send_message(config.me, text=e)
+        return False
+
+    if row:
+        least_active_users_tuple_of_tuples = cursor.fetchall()
+        # Make list out of tuple of tuples that is returned by MySQL
+        least_active_users = [chat_id[0] for chat_id in least_active_users_tuple_of_tuples]
+    else:
+        log.warning('There are no least active users')
+        return False
+
+    log.info('Removing language preferences of {} least active users from memory...'.format(max_users))
+    num_deleted_entries = 0
+    for entry in least_active_users:
+        log.debug('Deleting {}...'.format(entry))
+        deleted_entry = user_lang.pop(entry, None)
+        if deleted_entry:
+            num_deleted_entries += 1
+    log.debug('{} entries with users languages preferences were removed from ram'.format(num_deleted_entries))
+    return True
 
 
 def set_user_language(chat_id, lang):
@@ -138,6 +184,7 @@ def change_user_language(chat_id):
 
 
 def turn_bot_off():
+    bot.send_message(config.me, lang_msgs[get_user_lang(config.me)]['bye'])
     db_connector.disconnect()
     log.info('Please wait for a sec, bot is turning off...')
     bot.stop_polling()
@@ -189,8 +236,17 @@ def handle_menu_response(message):
         log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
     elif message.text == "ciao" and chat_id == config.me:
-        bot.send_message(chat_id, lang_msgs[current_user_lang]['bye'])
         turn_bot_off()
+
+    elif message.text == 'clean ram' and chat_id == config.me:
+        size_user_lang = len(list(user_lang.keys()))
+        bot.send_message(config.me, text='There is {} entries with users lang preferences. '
+                                         'Removing them...'.format(size_user_lang))
+        if clean_old_user_languages_from_memory(10):
+            bot.send_message(config.me, text='RAM was cleaned up.')
+        else:
+            bot.send_message(config.me, text='Couldn\'t clean up RAM.')
+
     else:
         log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
                                                                                         message.from_user.last_name,
@@ -491,12 +547,12 @@ def save_user_query_info(data, message, country=None):
     try:
         log.info('Adding new entry to photo_queries_table...')
 
-        query = ('INSERT INTO photo_queries_table (chat_id, camera_name, lens_name, first_name, last_name,'
-                 ' username, country_en, country_ru) VALUES ({}, {}, {}, {}, {}, {}, '
+        query = ('INSERT INTO photo_queries_table '
+                 '(chat_id, camera_name, lens_name, first_name, last_name, username, country_en, country_ru) '
+                 'VALUES ({}, {}, {}, {}, {}, {}, '
                  '{}, {})'.format(chat_id, camera_name, lens_name, first_name, last_name, username, country_en,
                                   country_ru))
 
-        # log.debug(query)
         cursor.execute(query)
         db.commit()
     except (MySQLdb.Error, MySQLdb.Warning) as e:
