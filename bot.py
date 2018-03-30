@@ -219,13 +219,14 @@ def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
     chat_id = message.chat.id
     current_user_lang = get_user_lang(chat_id)
+
     if message.text == 'Русский/English':
 
         if change_user_language(chat_id):
-            bot.send_message(chat_id, lang_msgs[current_user_lang]['switch_lang_success'])
+            bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_success'])
             create_main_keyboard(chat_id)
         else:
-            bot.send_message(chat_id, lang_msgs[current_user_lang]['switch_lang_failure'])
+            bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_failure'])
             create_main_keyboard(chat_id)
 
     elif message.text == lang_msgs[current_user_lang]['top_cams']:
