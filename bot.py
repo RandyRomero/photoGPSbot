@@ -192,6 +192,41 @@ def change_user_language(chat_id, curr_lang):
         return False
 
 
+def get_admin_stat(command):
+    answer = 'There is some statistics for you: \n'
+
+    # Last users with date of last time when they used bot
+    if command == 'last active users':
+        query = ('SELECT MAX(time), last_name, first_name, username FROM photo_queries_table'
+                 ' GROUP BY chat_id ORDER BY MAX(time) DESC LIMIT 100')
+        cursor = db.execute_query(query)
+        user_roster = cursor.fetchall()
+        users = ''
+        for user in user_roster:
+            for item in user:
+                users += '{} '.format(item)
+            users += '\n'
+        answer = '\nUp to 100 last active users by time when they sent picture last time:\n'
+        answer += users
+        return answer
+
+
+
+
+    # Return distinct users by order by last time they used bot
+    # SELECT time, last_name, first_name, username FROM photo_queries_table GROUP BY chat_id ORDER BY MAX(time) LIMIT 100;
+
+    # Return the last time when Baranov used the bot
+    # SELECT * FROM (SELECT time, chat_id FROM photo_queries_table WHERE last_name="Baranov" ORDER BY time) sub ORDER BY time DESC LIMIT 1;
+
+    # Most active users
+    # Last ten queries
+    # Number of all photo queries
+    # Number of all users
+    # Number of all devices
+    # uptime
+
+
 def turn_bot_off():
     bot.send_message(config.me, lang_msgs[get_user_lang(config.me)]['bye'])
     if db.disconnect():
@@ -248,17 +283,28 @@ def handle_menu_response(message):
         bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
         log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
-    elif message.text == "ciao" and chat_id == config.me:
-        turn_bot_off()
+    elif message.text == 'admin' and chat_id == config.me:
+        # It creates inline keyboard with options for admin
+        # Function that handle user interaction with the keyboard called admin_menu
+        keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
+        keyboard.add(types.InlineKeyboardButton(text='Turn bot off', callback_data='off'))
+        keyboard.add(types.InlineKeyboardButton(text='Last active users', callback_data='last active'))
+        bot.send_message(config.me, 'Admin commands', reply_markup=keyboard)
 
-    elif message.text == 'clean ram' and chat_id == config.me:
-        size_user_lang = len(list(user_lang.keys()))
-        bot.send_message(config.me, text='There is {} entries with users lang preferences. '
-                                         'Removing them...'.format(size_user_lang))
-        if clean_old_user_languages_from_memory(10):
-            bot.send_message(config.me, text='RAM was cleaned up.')
-        else:
-            bot.send_message(config.me, text='Couldn\'t clean up RAM.')
+    # elif message.text == 'last active users' and chat_id == config.me:
+    #     bot.send_message(config.me, text=get_admin_stat('last active users'))
+    #
+    # elif message.text == "ciao" and chat_id == config.me:
+    #     turn_bot_off()
+
+    # elif message.text == 'clean ram' and chat_id == config.me:
+    #     size_user_lang = len(list(user_lang.keys()))
+    #     bot.send_message(config.me, text='There is {} entries with users lang preferences. '
+    #                                      'Removing them...'.format(size_user_lang))
+    #     if clean_old_user_languages_from_memory(10):
+    #         bot.send_message(config.me, text='RAM was cleaned up.')
+    #     else:
+    #         bot.send_message(config.me, text='Couldn\'t clean up RAM.')
 
     else:
         log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
@@ -268,6 +314,16 @@ def handle_menu_response(message):
 
         # Answer to user that bot can't make a conversation with him
         bot.send_message(chat_id, lang_msgs[current_user_lang]['dont_speak'])
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def admin_menu(call):
+    bot.answer_callback_query(callback_query_id=call.id, show_alert=False)  # Remove progress bar from pressed button
+
+    if call.data == 'off':
+        turn_bot_off()
+    elif call.data == 'last active':
+        bot.send_message(config.me, text=get_admin_stat('last active users'))
 
 
 @bot.message_handler(content_types=['photo'])
