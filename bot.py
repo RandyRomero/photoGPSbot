@@ -5,6 +5,7 @@
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/map_returning_bot
 
+import time
 import MySQLdb
 import telebot
 from telebot import types
@@ -386,24 +387,12 @@ def get_address(latitude, longitude, lang):
         return False
 
 
+# Convert exif gps to format that accepts Telegram (and Google Maps for example)
 def get_coordinates_from_exif(data, chat_id):
-    # Convert exif gps to format that accepts Telegram (and Google Maps for example)
-
     current_user_lang = get_user_lang(chat_id)
-    try:
-        # lat, lon = exif_to_dd(raw_coordinates)
-        lat_ref = str(data['GPS GPSLatitudeRef'])
-        lat = data['GPS GPSLatitude']
-        lon_ref = str(data['GPS GPSLongitudeRef'])
-        lon = data['GPS GPSLongitude']
-    except KeyError:
-        log.info('This picture doesn\'t contain coordinates.')
-        return lang_msgs[current_user_lang]['no_gps']
-        # TODO Save exif of photo if converter catch an error trying to convert gps data
 
     # convert ifdtag from exifread module to decimal degree format of coordinate
     def idf_tag_to_coordinate(tag):
-
         tag = str(tag).replace('[', '').replace(']', '').split(',')
         if '/' in tag[2]:
             # Slit string like '4444/5555' and divide first one by second one
@@ -417,11 +406,30 @@ def get_coordinates_from_exif(data, chat_id):
 
         return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
 
-    # Return positive ir negative longitude/latitude from exifread's ifdtag
-    lat = -(idf_tag_to_coordinate(lat)) if lat_ref == 'S' else idf_tag_to_coordinate(lat)
-    lon = -(idf_tag_to_coordinate(lon)) if lon_ref == 'W' else idf_tag_to_coordinate(lon)
+    try:
+        # lat, lon = exif_to_dd(raw_coordinates)
+        lat_ref = str(data['GPS GPSLatitudeRef'])
+        raw_lat = data['GPS GPSLatitude']
+        lon_ref = str(data['GPS GPSLongitudeRef'])
+        raw_lon = data['GPS GPSLongitude']
+    except KeyError:
+        log.info('This picture doesn\'t contain coordinates.')
+        return lang_msgs[current_user_lang]['no_gps']
+
+    # Return positive or negative longitude/latitude from exifread's ifdtag
+    lat = -(idf_tag_to_coordinate(raw_lat)) if lat_ref == 'S' else idf_tag_to_coordinate(raw_lat)
+    lon = -(idf_tag_to_coordinate(raw_lon)) if lon_ref == 'W' else idf_tag_to_coordinate(raw_lon)
     if lat is False or lon is False:
+        log.error('Cannot read coordinates of this photo.')
+        raw_coordinates = ('Latitude reference: {}\n.Raw latitude: {}\n.Longitude reference: {}\n.'
+                           'Raw longitude: {}.'.format(lat_ref, raw_lat, lon_ref, raw_lon))
+        log.info(raw_coordinates)
+        bot.send_message(config.me, text=('Cannot read these coordinates: ' + raw_coordinates))
         return [lang_msgs[current_user_lang]['bad_gps']]
+    elif lat < 1 and lon < 1:
+        log.info('There are zero GPS coordinates in this photo.')
+        return [lang_msgs[current_user_lang]['bad_gps']]
+
     else:
         return lat, lon
 
@@ -606,9 +614,9 @@ def read_exif(image, chat_id):
         except TypeError:
             address, country = '', None
     else:
-        # Add user message that photo doesn't have info about location
+        # Add user message that photo doesn't have info about location or it can't be read
         address, country = '', None
-        user_msg = exif_converter_result
+        user_msg = exif_converter_result[0]
         answer.append(user_msg)
 
     # Get necessary tags from EXIF data
@@ -676,6 +684,7 @@ def handle_image(message):
         return
 
     answer, cam_info, country = read_exif_result
+
     # Send location and info about shot back to user
 
     if isinstance(answer[0], tuple):
@@ -692,7 +701,7 @@ def handle_image(message):
         save_user_query_info(cam_info, message, country)
         return
 
-    # Sent to user only info about shot because there is no gps coordinates in his shot
+    # Sent to user only info about camera because there is no gps coordinates in his photo
     # user_msg consists of message that there is no info about location and messages with photo details
     user_msg = '{}\n{}'.format(answer[0], answer[1])
 
@@ -713,8 +722,16 @@ if load_last_user_languages(10):
 else:
     log.warning('Couldn\'t cache users\' languages.')
 
+try:
+    bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
+except requests.exceptions.ReadTimeout as e:
+    log.error(e)
+    bot.stop_polling()
+    time.sleep(30)
+    bot.polling(none_stop=True, timeout=90)
 
-bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
+
+
 # # If bot crashes, try to restart and send me a message
 # def telegram_polling(state):
 #     try:
