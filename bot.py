@@ -5,19 +5,20 @@
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/map_returning_bot
 
-import config
+import MySQLdb
 import telebot
 from telebot import types
 import exifread
 import requests
 from io import BytesIO
 import traceback
+from datetime import datetime, timedelta
+from geopy.geocoders import Nominatim
+import config
 from handle_logs import log, clean_log_folder
 from language_pack import lang_msgs
 import db_connector
-import MySQLdb
-from datetime import datetime, timedelta
-from geopy.geocoders import Nominatim
+
 
 log.info('Starting photoGPSbot...')
 clean_log_folder(20)
@@ -25,15 +26,15 @@ clean_log_folder(20)
 bot = telebot.TeleBot(config.token)
 
 # Connect to db
-db = db_connector.connect()
+db = db_connector.DB()
 if not db:
     log.warning('Can\'t connect to db.')
 
 # ping(True) set to check whether or not the connection to the server is
 # working. If it has gone down, an automatic reconnection is
 # attempted.
-db.ping(True)
-cursor = db.cursor()
+# db.ping(True)
+# cursor = db.cursor()
 
 user_lang = {}
 
@@ -57,13 +58,13 @@ def load_last_user_languages(max_users):
 
     log.info('Figure out last active users...')
     try:
-        row = cursor.execute(query)
+        cursor = db.execute_query(query)
     except (MySQLdb.Error, MySQLdb.Warning) as e:
         log.warning(e)
         bot.send_message(config.me, text=e)
         return False
 
-    if row:
+    if cursor.rowcount:
         last_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
         last_active_users = [chat_id[0] for chat_id in last_active_users_tuple_of_tuples]
@@ -74,14 +75,12 @@ def load_last_user_languages(max_users):
     log.debug('Downloading language preferences for {} last active users from DB...'.format(max_users))
     # Select from db with language preferences languages for users who were active recently
     query = "SELECT chat_id, lang FROM user_lang_table WHERE chat_id in {};".format(tuple(last_active_users))
-    row = None
-    row = cursor.execute(query)
-    if row:
+    cursor = db.execute_query(query)
+    if cursor.rowcount:
         languages_of_users = cursor.fetchall()
         for line in languages_of_users:
             log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
             user_lang[line[0]] = line[1]
-        log.debug('Done')
         return True
     else:
         log.warning('There are now entries about user languages in database.')
@@ -103,13 +102,13 @@ def clean_old_user_languages_from_memory(max_users):
 
     log.info('Figuring out least active users...')
     try:
-        row = cursor.execute(query)
+        cursor = db.execute_query(query)
     except (MySQLdb.Error, MySQLdb.Warning) as e:
         log.warning(e)
         bot.send_message(config.me, text=e)
         return False
 
-    if row:
+    if cursor.rowcount:
         least_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
         least_active_users = [chat_id[0] for chat_id in least_active_users_tuple_of_tuples]
@@ -131,8 +130,8 @@ def clean_old_user_languages_from_memory(max_users):
 def set_user_language(chat_id, lang):
     log.debug('Updating info about user {} language in memory & database...'.format(chat_id))
     query = 'UPDATE user_lang_table SET lang="{}" WHERE chat_id={}'.format(lang, chat_id)
-    cursor.execute(query)
-    db.commit()
+    db.execute_query(query)
+    db.conn.commit()
     user_lang[chat_id] = lang
 
     # Actually we cat set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
@@ -155,22 +154,22 @@ def get_user_lang(chat_id):
     if not lang:
         query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
         try:
-            row = cursor.execute(query)
+            cursor = db.execute_query(query)
         except (MySQLdb.Error, MySQLdb.Warning) as e:
             log.warning(e)
             lang = 'en-US'
             user_lang[chat_id] = lang
             return lang
 
-        if row:
+        if cursor.rowcount:
             lang = cursor.fetchone()[0]
             user_lang[chat_id] = lang
         else:
             lang = 'en-US'
             log.info('User {} default language for bot is set to be en-US.'.format(chat_id))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
-            cursor.execute(query)
-            db.commit()
+            db.execute_query(query)
+            db.conn.commit()
             user_lang[chat_id] = lang
 
         if len(user_lang) > 10:
@@ -194,11 +193,13 @@ def change_user_language(chat_id, curr_lang):
 
 def turn_bot_off():
     bot.send_message(config.me, lang_msgs[get_user_lang(config.me)]['bye'])
-    db_connector.disconnect()
-    log.info('Please wait for a sec, bot is turning off...')
-    bot.stop_polling()
-    log.info('Auf Wiedersehen! Bot is turned off.')
-    exit()
+    if db.disconnect():
+        log.info('Please wait for a sec, bot is turning off...')
+        bot.stop_polling()
+        log.info('Auf Wiedersehen! Bot is turned off.')
+        exit()
+    else:
+        log.error('Cannot stop bot.')
 
 
 @bot.message_handler(commands=['start'])
@@ -385,7 +386,7 @@ def get_address(latitude, longitude, lang):
         return False
 
 
-def exif_to_dd(data, chat_id):
+def get_coordinates_from_exif(data, chat_id):
     # Convert exif gps to format that accepts Telegram (and Google Maps for example)
 
     current_user_lang = get_user_lang(chat_id)
@@ -442,8 +443,8 @@ def check_camera_tags(tags):
             log.info('Looking up collation for {}'.format(tag))
             try:
                 query = 'SELECT right_tag FROM tag_table WHERE wrong_tag="{}"'.format(tag)
-                row = cursor.execute(query)
-                if row:
+                cursor = db.execute_query(query)
+                if cursor.rowcount:
                     tag = cursor.fetchone()[0]  # Get appropriate tag from the table
                     log.info('Tag after looking up in tag_tables - {}.'.format(tag))
             except (MySQLdb.Error, MySQLdb.Warning) as e:
@@ -483,8 +484,8 @@ def get_most_popular_items(item_type, chat_id):
     query = ('SELECT {0} FROM photo_queries_table WHERE time > "{1}" GROUP BY {0} '
              'ORDER BY count({0}) DESC'.format(item_type, month_ago))
     try:
-        rows = cursor.execute(query)
-        if not rows:
+        cursor = db.execute_query(query)
+        if not cursor.rowcount:
             log.info('Can\'t evaluate a list of the most popular items')
             return lang_msgs[get_user_lang(chat_id)]['no_top']
 
@@ -516,8 +517,9 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
     log.debug('Check how many users also have feature: {}...'.format(feature_name))
     answer = ''
     query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(feature_type, feature_name)
-    row = cursor.execute(query)
+    cursor = db.execute_query(query)
     # Because 1 is yourself (but sometimes you can use it for debug
+    row = cursor.rowcount
     if not row or row < 1:
         return None
     if feature_type == 'camera_name':
@@ -537,7 +539,6 @@ get_number_users_with_same_feature = cache_number_users_with_same_feature(get_nu
 
 # Save camera info to database to collect statistics
 def save_user_query_info(data, message, country=None):
-    global db
     camera_name, lens_name = data
     camera_name = 'NULL' if not camera_name else '{0}{1}{0}'.format('"', camera_name)
     lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
@@ -564,8 +565,8 @@ def save_user_query_info(data, message, country=None):
                  '{}, {})'.format(chat_id, camera_name, lens_name, first_name, last_name, username, country_en,
                                   country_ru))
 
-        cursor.execute(query)
-        db.commit()
+        db.execute_query(query)
+        db.conn.commit()
     except (MySQLdb.Error, MySQLdb.Warning) as e:
         log.error(e)
         return
@@ -594,7 +595,7 @@ def read_exif(image, chat_id):
         return False
 
     # Convert EXIF data about location to decimal degrees
-    exif_converter_result = exif_to_dd(exif, chat_id)
+    exif_converter_result = get_coordinates_from_exif(exif, chat_id)
     if isinstance(exif_converter_result, tuple):
         coordinates = exif_converter_result
         answer.append(coordinates)
