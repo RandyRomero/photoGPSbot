@@ -69,6 +69,7 @@ class DB:
 
     def disconnect(self):
         self.conn.close()
-        self.tunnel.stop()
+        if self.tunnel:
+            self.tunnel.stop()
         self.tunnel_opened = False
         return True
