@@ -481,10 +481,10 @@ def get_coordinates_from_exif(data, chat_id):
                            'Raw longitude: {}.'.format(lat_ref, raw_lat, lon_ref, raw_lon))
         log.info(raw_coordinates)
         bot.send_message(config.me, text=('Cannot read these coordinates: ' + raw_coordinates))
-        return [lang_msgs[current_user_lang]['bad_gps']]
+        return lang_msgs[current_user_lang]['bad_gps']
     elif lat < 1 and lon < 1:
         log.info('There are zero GPS coordinates in this photo.')
-        return [lang_msgs[current_user_lang]['bad_gps']]
+        return lang_msgs[current_user_lang]['bad_gps']
 
     else:
         return lat, lon
@@ -660,6 +660,7 @@ def read_exif(image, chat_id):
 
     # Convert EXIF data about location to decimal degrees
     exif_converter_result = get_coordinates_from_exif(exif, chat_id)
+    # If tuple - there are coordinates, else - message to user
     if isinstance(exif_converter_result, tuple):
         coordinates = exif_converter_result
         answer.append(coordinates)
@@ -672,7 +673,7 @@ def read_exif(image, chat_id):
     else:
         # Add user message that photo doesn't have info about location or it can't be read
         address, country = '', None
-        user_msg = exif_converter_result[0]
+        user_msg = exif_converter_result
         answer.append(user_msg)
 
     # Get necessary tags from EXIF data
