@@ -587,7 +587,7 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
     if not row or row < 1:
         return None
     if feature_type == 'camera_name':
-        # asterisks fro markdown - to make font bold
+        # asterisks for markdown - to make font bold
         answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
         answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['lens_users'], str(row - 1))
@@ -598,7 +598,7 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
 
 
 # Make closure which preservers result of the function in order not to call database too often
-get_number_users_with_same_feature = cache_number_users_with_same_feature(get_number_users_by_feature, 30)
+get_number_users_with_same_feature = cache_number_users_with_same_feature(get_number_users_by_feature, 5)
 
 
 # Save camera info to database to collect statistics
@@ -636,13 +636,13 @@ def save_user_query_info(data, message, country=None):
         return
 
 
-def read_exif(image, chat_id):
+def read_exif(image, message):
     """
     # Get various info about photo that user sent: time when picture was taken, location as longitude and latitude,
     # post address, type of camera/smartphone and lens, how many people have the same camera/lens.
 
     :param image: actual photo that user sent to bot
-    :param chat_id: user id who ent photo and who bot should answer to
+    :param message: object from Telegram that contains user id, name etc
     :return: list with three values. First value called answer is also list that contains different information
     about picture. First value of answer is either tuple with coordinates from photo or string message
     that photo doesn't contain coordinates. Second value of answer is string with photo details: time, camera, lens
@@ -652,6 +652,7 @@ def read_exif(image, chat_id):
     Third  value in list that this function returns is a country where picture was taken.
 
     """
+    chat_id = message.chat.id
     answer = []
     exif = exifread.process_file(image, details=False)
     if not len(exif.keys()):
@@ -692,12 +693,16 @@ def read_exif(image, chat_id):
     lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
 
     camera, lens = check_camera_tags([camera, lens])
+    camera_info = camera, lens
+    if country:
+        save_user_query_info(camera_info, message, country)
+    else:
+        save_user_query_info(camera_info, message)
+
     others_with_this_cam = get_number_users_with_same_feature(camera, 'camera_name', chat_id)
     others_with_this_lens = get_number_users_with_same_feature(lens, 'lens_name', chat_id) if lens else None
     others_from_this_country = (get_number_users_with_same_feature(country[0], 'country_en', chat_id)
                                 if country else None)
-
-    camera_info = camera, lens
 
     info_about_shot = ''
     for tag, item in zip(lang_msgs[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens, address]):
@@ -733,7 +738,7 @@ def handle_image(message):
     user_file = BytesIO(r.content)  # Get file-like object of user's photo
 
     # Get coordinates
-    read_exif_result = read_exif(user_file, chat_id)
+    read_exif_result = read_exif(user_file, message)
 
     # Send to user message that there is no EXIF data in his picture
     if not read_exif_result:
@@ -755,7 +760,7 @@ def handle_image(message):
                                       message.from_user.id))
 
         log.info(log_msg)
-        save_user_query_info(cam_info, message, country)
+        # save_user_query_info(cam_info, message, country)
         return
 
     # Sent to user only info about camera because there is no gps coordinates in his photo
@@ -769,7 +774,7 @@ def handle_image(message):
                                   message.from_user.username,
                                   message.from_user.id))
     log.info(log_msg)
-    save_user_query_info(cam_info, message)
+    # save_user_query_info(cam_info, message)
 
 
 # I think you can safely cache several hundred or thousand of user-lang pairs without consuming to much memory,
