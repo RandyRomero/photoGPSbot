@@ -206,21 +206,32 @@ def get_admin_stat(command):
             for item in user:
                 users += '{} '.format(item)
             users += '\n'
-        answer = '\nUp to 100 last active users by time when they sent picture last time:\n'
+        answer += 'Up to 100 last active users by time when they sent picture last time:\n'
         answer += users
         return answer
 
+    elif command == 'total number photos sent':
+        query = 'SELECT COUNT(chat_id) FROM photo_queries_table'
+        cursor = db.execute_query(query)
+        answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
+        query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE chat_id !={}'.format(config.me)
+        cursor = db.execute_query(query)
+        answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
+        return answer
+
+    elif command == 'photos today':
+        # Show how many photos have been sent since 00:00:00 of today
+        today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+        query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE time > "{}"'.format(today)
+        cursor = db.execute_query(query)
+        answer += '{} times users sent photos today.'.format(cursor.fetchone()[0])
+        query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE time > "{}" AND chat_id !={}'.format(today,
+                                                                                                           config.me)
+        cursor = db.execute_query(query)
+        answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
+        return answer
 
 
-
-    # Return distinct users by order by last time they used bot
-    # SELECT time, last_name, first_name, username FROM photo_queries_table GROUP BY chat_id ORDER BY MAX(time) LIMIT 100;
-
-    # Return the last time when Baranov used the bot
-    # SELECT * FROM (SELECT time, chat_id FROM photo_queries_table WHERE last_name="Baranov" ORDER BY time) sub ORDER BY time DESC LIMIT 1;
-
-    # Most active users
-    # Last ten queries
     # Number of all photo queries
     # Number of all users
     # Number of all devices
@@ -289,6 +300,9 @@ def handle_menu_response(message):
         keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
         keyboard.add(types.InlineKeyboardButton(text='Turn bot off', callback_data='off'))
         keyboard.add(types.InlineKeyboardButton(text='Last active users', callback_data='last active'))
+        keyboard.add(types.InlineKeyboardButton(text='Total number of photos were sent',
+                                                callback_data='total number photos sent'))
+        keyboard.add(types.InlineKeyboardButton(text='Number of photos today', callback_data='photos today'))
         bot.send_message(config.me, 'Admin commands', reply_markup=keyboard)
 
     # elif message.text == 'last active users' and chat_id == config.me:
@@ -318,12 +332,17 @@ def handle_menu_response(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def admin_menu(call):
+    # Respond commands from admin menu
     bot.answer_callback_query(callback_query_id=call.id, show_alert=False)  # Remove progress bar from pressed button
 
     if call.data == 'off':
         turn_bot_off()
     elif call.data == 'last active':
         bot.send_message(config.me, text=get_admin_stat('last active users'))
+    elif call.data == 'total number photos sent':
+        bot.send_message(config.me, text=get_admin_stat('total number photos sent'))
+    elif call.data == 'photos today':
+        bot.send_message(config.me, text=get_admin_stat('photos today'))
 
 
 @bot.message_handler(content_types=['photo'])
