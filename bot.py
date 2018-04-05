@@ -167,7 +167,7 @@ def get_user_lang(chat_id):
             user_lang[chat_id] = lang
         else:
             lang = 'en-US'
-            # TODO Send me message that there is new user in bot
+            bot.send_message(config.me, text='You have a new user!')
             log.info('User {} default language for bot is set to be en-US.'.format(chat_id))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
             db.execute_query(query)
