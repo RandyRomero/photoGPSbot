@@ -135,8 +135,8 @@ def set_user_language(chat_id, lang):
     db.conn.commit()
     user_lang[chat_id] = lang
 
-    # Actually we cat set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
-    # this function working well
+    # Actually we can set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
+    # this function working well or not
     if len(user_lang) > 10:
         clean_log_folder(2)
 
@@ -167,6 +167,7 @@ def get_user_lang(chat_id):
             user_lang[chat_id] = lang
         else:
             lang = 'en-US'
+            # TODO Send me message that there is new user in bot
             log.info('User {} default language for bot is set to be en-US.'.format(chat_id))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
             db.execute_query(query)
@@ -193,10 +194,14 @@ def change_user_language(chat_id, curr_lang):
 
 
 def get_admin_stat(command):
+    # Function that returns statistics to admin by command
+    global start_time
     answer = 'There is some statistics for you: \n'
+    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
 
     # Last users with date of last time when they used bot
     if command == 'last active users':
+        log.info('Evaluating last users with date of last time when they used bot...')
         query = ('SELECT MAX(time), last_name, first_name, username FROM photo_queries_table'
                  ' GROUP BY chat_id ORDER BY MAX(time) DESC LIMIT 100')
         cursor = db.execute_query(query)
@@ -208,20 +213,23 @@ def get_admin_stat(command):
             users += '\n'
         answer += 'Up to 100 last active users by time when they sent picture last time:\n'
         answer += users
+        log.info('Done.')
         return answer
 
     elif command == 'total number photos sent':
+        log.info('Evaluating total number of photo queries in database...')
         query = 'SELECT COUNT(chat_id) FROM photo_queries_table'
         cursor = db.execute_query(query)
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
         query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE chat_id !={}'.format(config.me)
         cursor = db.execute_query(query)
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
+        log.info('Done.')
         return answer
 
     elif command == 'photos today':
         # Show how many photos have been sent since 00:00:00 of today
-        today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+        log.info('Evaluating number of photos which were sent today.')
         query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE time > "{}"'.format(today)
         cursor = db.execute_query(query)
         answer += '{} times users sent photos today.'.format(cursor.fetchone()[0])
@@ -229,13 +237,40 @@ def get_admin_stat(command):
                                                                                                            config.me)
         cursor = db.execute_query(query)
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
+        log.info('Done.')
         return answer
 
+    elif command == 'number of users':
+        # To show you number of users who has used bot at least once or more
+        log.info('Evaluating number of users that use bot since the first day and today...')
+        query = 'SELECT COUNT(DISTINCT chat_id) FROM photo_queries_table'
+        cursor = db.execute_query(query)
+        answer += 'There are totally {} users.'.format(cursor.fetchone()[0])
+        query = 'SELECT COUNT(DISTINCT chat_id) FROM photo_queries_table WHERE time > "{}"'.format(today)
+        cursor = db.execute_query(query)
+        answer += '\n{} users have sent photos today.'.format(cursor.fetchone()[0])
+        log.info('Done.')
+        return answer
 
-    # Number of all photo queries
-    # Number of all users
-    # Number of all devices
-    # uptime
+    elif command == 'number of gadgets':
+        # To show you number smartphones + cameras in database
+        log.info('Evaluating number of cameras and smartphones in database...')
+        query = 'SELECT COUNT(DISTINCT camera_name) FROM photo_queries_table'
+        cursor = db.execute_query(query)
+        answer += 'There are totally {} cameras/smartphones.'.format(cursor.fetchone()[0])
+        query = 'SELECT COUNT(DISTINCT camera_name) FROM photo_queries_table WHERE time > "{}"'.format(today)
+        cursor = db.execute_query(query)
+        answer += '\n{} cameras/smartphones were used today.'.format(cursor.fetchone()[0])
+        log.info('Done.')
+        return answer
+
+    elif command == 'uptime':
+        fmt = 'Uptime: {0} days, {} hours, {} minutes and {} seconds.'
+        td = datetime.now() - start_time
+        # datetime.timedelta.seconds returns you total number of seconds since given time, so you need to perform
+        # a little bit of math to make whole hours, minutes and seconds from it
+        # And there isn't any normal way to do it in Python unfortunately
+        return fmt.format(td.days, td.seconds // 3600, td.seconds % 3600 // 60, td.seconds % 60)
 
 
 def turn_bot_off():
@@ -294,7 +329,7 @@ def handle_menu_response(message):
         bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
         log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
-    elif message.text == 'admin' and chat_id == config.me:
+    elif message.text.lower() == 'admin' and chat_id == config.me:
         # It creates inline keyboard with options for admin
         # Function that handle user interaction with the keyboard called admin_menu
         keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
@@ -303,22 +338,10 @@ def handle_menu_response(message):
         keyboard.add(types.InlineKeyboardButton(text='Total number of photos were sent',
                                                 callback_data='total number photos sent'))
         keyboard.add(types.InlineKeyboardButton(text='Number of photos today', callback_data='photos today'))
+        keyboard.add(types.InlineKeyboardButton(text='Number of users', callback_data='number of users'))
+        keyboard.add(types.InlineKeyboardButton(text='Number of gadgets', callback_data='number of gadgets'))
+        keyboard.add(types.InlineKeyboardButton(text='Uptime', callback_data='uptime'))
         bot.send_message(config.me, 'Admin commands', reply_markup=keyboard)
-
-    # elif message.text == 'last active users' and chat_id == config.me:
-    #     bot.send_message(config.me, text=get_admin_stat('last active users'))
-    #
-    # elif message.text == "ciao" and chat_id == config.me:
-    #     turn_bot_off()
-
-    # elif message.text == 'clean ram' and chat_id == config.me:
-    #     size_user_lang = len(list(user_lang.keys()))
-    #     bot.send_message(config.me, text='There is {} entries with users lang preferences. '
-    #                                      'Removing them...'.format(size_user_lang))
-    #     if clean_old_user_languages_from_memory(10):
-    #         bot.send_message(config.me, text='RAM was cleaned up.')
-    #     else:
-    #         bot.send_message(config.me, text='Couldn\'t clean up RAM.')
 
     else:
         log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
@@ -343,6 +366,12 @@ def admin_menu(call):
         bot.send_message(config.me, text=get_admin_stat('total number photos sent'))
     elif call.data == 'photos today':
         bot.send_message(config.me, text=get_admin_stat('photos today'))
+    elif call.data == 'number of users':
+        bot.send_message(config.me, text=get_admin_stat('number of users'))
+    elif call.data == 'number of gadgets':
+        bot.send_message(config.me, text=get_admin_stat('number of gadgets'))
+    elif call.data == 'uptime':
+        bot.send_message(config.me, text=get_admin_stat('uptime'))
 
 
 @bot.message_handler(content_types=['photo'])
@@ -353,7 +382,6 @@ def answer_photo_message(message):
                                               message.from_user.last_name,
                                               message.from_user.username,
                                               message.from_user.id))
-
     log.info(log_message)
 
 
@@ -432,7 +460,7 @@ def cache_most_popular_items(func, cache_time):
 
 
 def get_address(latitude, longitude, lang):
-    start_time = datetime.now()
+    # start_time = datetime.now()
     # Get address as a string by coordinates from photo that user sent to bot
 
     coordinates = "{}, {}".format(latitude, longitude)
@@ -453,8 +481,8 @@ def get_address(latitude, longitude, lang):
             location2 = geolocator.reverse(coordinates, language=second_lang)
             location2_raw = location2.raw
             country_en = location2_raw['address']['country']
-        log.debug("It took {} seconds for get_address function to do the job".format((datetime.now() -
-                                                                                      start_time).seconds))
+        # log.debug("It took {} seconds for get_address function to do the job".format((datetime.now() -
+        #                                                                               start_time).seconds))
         return location.address, (country_en, country_ru)
     except:
         log.error('Getting address failed!')
@@ -804,7 +832,9 @@ else:
     log.warning('Couldn\'t cache users\' languages.')
 
 try:
+    start_time = datetime.now()
     bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
+
 except requests.exceptions.ReadTimeout as e:
     log.error(e)
     bot.stop_polling()
