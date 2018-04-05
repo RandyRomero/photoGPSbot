@@ -807,7 +807,6 @@ def handle_image(message):
                                       message.from_user.id))
 
         log.info(log_msg)
-        # save_user_query_info(cam_info, message, country)
         return
 
     # Sent to user only info about camera because there is no gps coordinates in his photo
@@ -821,7 +820,6 @@ def handle_image(message):
                                   message.from_user.username,
                                   message.from_user.id))
     log.info(log_msg)
-    # save_user_query_info(cam_info, message)
 
 
 # I think you can safely cache several hundred or thousand of user-lang pairs without consuming to much memory,
@@ -838,6 +836,7 @@ try:
 except requests.exceptions.ReadTimeout as e:
     log.error(e)
     bot.stop_polling()
+    log.warning('Pausing bot for 30 seconds...')
     time.sleep(30)
     bot.polling(none_stop=True, timeout=90)
 
