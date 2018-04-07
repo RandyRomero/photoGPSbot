@@ -265,7 +265,7 @@ def get_admin_stat(command):
         return answer
 
     elif command == 'uptime':
-        fmt = 'Uptime: {0} days, {} hours, {} minutes and {} seconds.'
+        fmt = 'Uptime: {} days, {} hours, {} minutes and {} seconds.'
         td = datetime.now() - start_time
         # datetime.timedelta.seconds returns you total number of seconds since given time, so you need to perform
         # a little bit of math to make whole hours, minutes and seconds from it
