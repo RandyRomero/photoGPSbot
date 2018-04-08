@@ -829,34 +829,20 @@ if load_last_user_languages(10):
 else:
     log.warning('Couldn\'t cache users\' languages.')
 
-try:
+
+def start_bot():
+    global start_time
     start_time = datetime.now()
     bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
 
+
+try:
+    start_bot()
 except requests.exceptions.ReadTimeout as e:
     log.error(e)
-    bot.stop_polling()
     log.warning('Pausing bot for 30 seconds...')
+    bot.stop_bot()
     time.sleep(30)
-    bot.polling(none_stop=True, timeout=90)
+    log.warning('Try to start the bot again...')
+    start_bot()
 
-
-
-# # If bot crashes, try to restart and send me a message
-# def telegram_polling(state):
-#     try:
-#         bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
-#         if state == 'recovering':
-#             bot.send_message(config.me, text='Bot has restarted after critical error.')
-#     except:
-#         # db_connector.disconnect()
-#         # log.warning('Bot crashed with:\n' + traceback.format_exc())
-#         bot.stop_polling()
-#         for i in range(30, 0, -1):
-#             print(str(i) + ' seconds to restart...')
-#             time.sleep(1)
-#         telegram_polling('recovering')
-
-#
-# if __name__ == '__main__':
-#     telegram_polling('OK')
