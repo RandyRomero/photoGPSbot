@@ -3,8 +3,9 @@
 
 # Small bot for Telegram that receive your photo and return you map where it was taken.
 # Written by Aleksandr Mikheev.
-# https://github.com/RandyRomero/map_returning_bot
+# https://github.com/RandyRomero/photoGPSbot
 
+import sys
 import time
 import MySQLdb
 import telebot
@@ -26,25 +27,20 @@ clean_log_folder(20)
 
 bot = telebot.TeleBot(config.token)
 
-# Connect to db
+# Connect to database
 db = db_connector.DB()
 if not db:
-    log.warning('Can\'t connect to db.')
+    log.error('Can\'t connect to db.')
+    bot.send_message(config.me, text='photoGPSbot can\'t connect to MySQL database!')
 
-# ping(True) set to check whether or not the connection to the server is
-# working. If it has gone down, an automatic reconnection is
-# attempted.
-# db.ping(True)
-# cursor = db.cursor()
-
-user_lang = {}
+user_lang = {}  # Dictionary that contains user_id -- preferred language for every active user
 
 
 def load_last_user_languages(max_users):
     """
-    Function that caching user-lang pairs of last active users from database to pc memory
+    Function that caches preferred language of last active users from database to pc memory
     :param max_users: number of entries to be cached
-    :return: True if it complete work without errors, False otherwise
+    :return: True if it completed work without errors, False otherwise
     """
 
     global user_lang
@@ -60,9 +56,9 @@ def load_last_user_languages(max_users):
     log.info('Figure out last active users...')
     try:
         cursor = db.execute_query(query)
-    except (MySQLdb.Error, MySQLdb.Warning) as e:
-        log.warning(e)
-        bot.send_message(config.me, text=e)
+    except (MySQLdb.Error, MySQLdb.Warning) as err:
+        log.warning(err)
+        bot.send_message(config.me, text=err)
         return False
 
     if cursor.rowcount:
@@ -73,8 +69,8 @@ def load_last_user_languages(max_users):
         log.warning('There are no last active users')
         return False
 
-    log.debug('Downloading language preferences for {} last active users from DB...'.format(max_users))
-    # Select from db with language preferences languages for users who were active recently
+    log.debug('Caching language preferences for {} last active users from database...'.format(max_users))
+    # Select from db with language preferences of users who were active recently
     query = "SELECT chat_id, lang FROM user_lang_table WHERE chat_id in {};".format(tuple(last_active_users))
     cursor = db.execute_query(query)
     if cursor.rowcount:
@@ -84,7 +80,7 @@ def load_last_user_languages(max_users):
             user_lang[line[0]] = line[1]
         return True
     else:
-        log.warning('There are now entries about user languages in database.')
+        log.warning('There are no entries about user languages in database.')
         return False
 
 
@@ -93,6 +89,7 @@ def clean_old_user_languages_from_memory(max_users):
 
     global user_lang
 
+    # Select users that the least active recently
     user_ids = tuple(user_lang.keys())
     query = ('SELECT chat_id '
              'FROM photo_queries_table '
@@ -104,9 +101,9 @@ def clean_old_user_languages_from_memory(max_users):
     log.info('Figuring out least active users...')
     try:
         cursor = db.execute_query(query)
-    except (MySQLdb.Error, MySQLdb.Warning) as e:
-        log.warning(e)
-        bot.send_message(config.me, text=e)
+    except (MySQLdb.Error, MySQLdb.Warning) as err:
+        log.warning(err)
+        bot.send_message(config.me, text=err)
         return False
 
     if cursor.rowcount:
@@ -124,11 +121,13 @@ def clean_old_user_languages_from_memory(max_users):
         deleted_entry = user_lang.pop(entry, None)
         if deleted_entry:
             num_deleted_entries += 1
-    log.debug('{} entries with users languages preferences were removed from ram'.format(num_deleted_entries))
+    log.debug('{} entries with users language preferences were removed from RAM.'.format(num_deleted_entries))
     return True
 
 
 def set_user_language(chat_id, lang):
+    # Function to set language for a user
+
     log.debug('Updating info about user {} language in memory & database...'.format(chat_id))
     query = 'UPDATE user_lang_table SET lang="{}" WHERE chat_id={}'.format(lang, chat_id)
     db.execute_query(query)
@@ -136,7 +135,7 @@ def set_user_language(chat_id, lang):
     user_lang[chat_id] = lang
 
     # Actually we can set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
-    # this function working well or not
+    # this function works well or not
     if len(user_lang) > 10:
         clean_log_folder(2)
 
@@ -145,9 +144,10 @@ def set_user_language(chat_id, lang):
 
 def get_user_lang(chat_id):
     """
-    Function to look up user language in dictionary (which is like cache), than in database (if it is not in dict),
-    then set language according to language code from telegram message object
-    :param chat_id: telegram message object
+    Function to look up user language in dictionary (which is like cache), then in database (if it is not in dict).
+    If there is not language preference for that user, set en-US by default.
+
+    :param chat_id: user_id
     :return: language tag like ru-RU, en-US as a string
     """
     log.info('Defining user {} language...'.format(chat_id))
@@ -156,8 +156,8 @@ def get_user_lang(chat_id):
         query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
         try:
             cursor = db.execute_query(query)
-        except (MySQLdb.Error, MySQLdb.Warning) as e:
-            log.warning(e)
+        except (MySQLdb.Error, MySQLdb.Warning) as err:
+            log.warning(err)
             lang = 'en-US'
             user_lang[chat_id] = lang
             return lang
@@ -181,13 +181,13 @@ def get_user_lang(chat_id):
 
 
 def change_user_language(chat_id, curr_lang):
-    # curr_lang = get_user_lang(chat_id)
+    # Switch language from Russian to English or conversely
     new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
     log.info('Changing user {} language from {} to {}...'.format(chat_id, curr_lang, new_lang))
     try:
         set_user_language(chat_id, new_lang)
         return new_lang
-    except:
+    except:  # who knows what god can send us
         log.error(traceback.format_exc())
         bot.send_message(config.me, text=traceback.format_exc())
         return False
@@ -197,13 +197,17 @@ def get_admin_stat(command):
     # Function that returns statistics to admin by command
     global start_time
     answer = 'There is some statistics for you: \n'
+    # Set to a beginning of the day
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
 
     # Last users with date of last time when they used bot
     if command == 'last active users':
-        log.info('Evaluating last users with date of last time when they used bot...')
-        query = ('SELECT MAX(time), last_name, first_name, username FROM photo_queries_table'
-                 ' GROUP BY chat_id ORDER BY MAX(time) DESC LIMIT 100')
+        log.info('Evaluating last active users with date of last time when they used bot...')
+        query = ('SELECT MAX(time), last_name, first_name, username '
+                 'FROM photo_queries_table '
+                 'GROUP BY chat_id '
+                 'ORDER BY MAX(time) '
+                 'DESC LIMIT 100')
         cursor = db.execute_query(query)
         user_roster = cursor.fetchall()
         users = ''
@@ -211,17 +215,20 @@ def get_admin_stat(command):
             for item in user:
                 users += '{} '.format(item)
             users += '\n'
-        answer += 'Up to 100 last active users by time when they sent picture last time:\n'
+        answer += 'Up to 100 last active users by the time when they sent picture last time:\n'
         answer += users
         log.info('Done.')
         return answer
 
     elif command == 'total number photos sent':
         log.info('Evaluating total number of photo queries in database...')
-        query = 'SELECT COUNT(chat_id) FROM photo_queries_table'
+        query = ('SELECT COUNT(chat_id) '
+                 'FROM photo_queries_table')
         cursor = db.execute_query(query)
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
-        query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE chat_id !={}'.format(config.me)
+        query = ('SELECT COUNT(chat_id) '
+                 'FROM photo_queries_table '
+                 'WHERE chat_id !={}'.format(config.me))
         cursor = db.execute_query(query)
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
@@ -230,23 +237,30 @@ def get_admin_stat(command):
     elif command == 'photos today':
         # Show how many photos have been sent since 00:00:00 of today
         log.info('Evaluating number of photos which were sent today.')
-        query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE time > "{}"'.format(today)
+        query = ('SELECT COUNT(chat_id) '
+                 'FROM photo_queries_table '
+                 'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
         answer += '{} times users sent photos today.'.format(cursor.fetchone()[0])
-        query = 'SELECT COUNT(chat_id) FROM photo_queries_table WHERE time > "{}" AND chat_id !={}'.format(today,
-                                                                                                           config.me)
+        query = ('SELECT COUNT(chat_id) '
+                 'FROM photo_queries_table '
+                 'WHERE time > "{}" '
+                 'AND chat_id !={}'.format(today, config.me))
         cursor = db.execute_query(query)
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
         return answer
 
     elif command == 'number of users':
-        # To show you number of users who has used bot at least once or more
+        # Show number of users who has used bot at least once or more (first for the whole time, then today)
         log.info('Evaluating number of users that use bot since the first day and today...')
-        query = 'SELECT COUNT(DISTINCT chat_id) FROM photo_queries_table'
+        query = ('SELECT COUNT(DISTINCT chat_id) '
+                 'FROM photo_queries_table')
         cursor = db.execute_query(query)
         answer += 'There are totally {} users.'.format(cursor.fetchone()[0])
-        query = 'SELECT COUNT(DISTINCT chat_id) FROM photo_queries_table WHERE time > "{}"'.format(today)
+        query = ('SELECT COUNT(DISTINCT chat_id) '
+                 'FROM photo_queries_table '
+                 'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
         answer += '\n{} users have sent photos today.'.format(cursor.fetchone()[0])
         log.info('Done.')
@@ -255,10 +269,13 @@ def get_admin_stat(command):
     elif command == 'number of gadgets':
         # To show you number smartphones + cameras in database
         log.info('Evaluating number of cameras and smartphones in database...')
-        query = 'SELECT COUNT(DISTINCT camera_name) FROM photo_queries_table'
+        query = ('SELECT COUNT(DISTINCT camera_name) '
+                 'FROM photo_queries_table')
         cursor = db.execute_query(query)
         answer += 'There are totally {} cameras/smartphones.'.format(cursor.fetchone()[0])
-        query = 'SELECT COUNT(DISTINCT camera_name) FROM photo_queries_table WHERE time > "{}"'.format(today)
+        query = ('SELECT COUNT(DISTINCT camera_name) '
+                 'FROM photo_queries_table '
+                 'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
         answer += '\n{} cameras/smartphones were used today.'.format(cursor.fetchone()[0])
         log.info('Done.')
@@ -274,12 +291,13 @@ def get_admin_stat(command):
 
 
 def turn_bot_off():
+    # Safely turn bot off
     bot.send_message(config.me, lang_msgs[get_user_lang(config.me)]['bye'])
     if db.disconnect():
         log.info('Please wait for a sec, bot is turning off...')
         bot.stop_polling()
         log.info('Auf Wiedersehen! Bot is turned off.')
-        exit()
+        sys.exit()
     else:
         log.error('Cannot stop bot.')
 
@@ -831,17 +849,16 @@ else:
 
 
 def start_bot():
-    global start_time
-    start_time = datetime.now()
     bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
 
 
 try:
+    start_time = datetime.now()
     start_bot()
 except requests.exceptions.ReadTimeout as e:
     log.error(e)
+    bot.stop_polling()
     log.warning('Pausing bot for 30 seconds...')
-    bot.stop_bot()
     time.sleep(30)
     log.warning('Try to start the bot again...')
     start_bot()
