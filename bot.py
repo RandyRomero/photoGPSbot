@@ -412,6 +412,10 @@ def dedupe_string(string):
 
 
 def cache_number_users_with_same_feature(func, cache_time):
+    # Closure to cache previous results of given function so to not call database to much
+    # It saves result in a dictionary because result depends on a user.
+    # cache_time - time in minutes when will be returned cached result instead of calling database
+
     when_was_called = None
     result = {}
 
@@ -423,12 +427,12 @@ def cache_number_users_with_same_feature(func, cache_time):
         # Add language tag to feature name to avoid returning to user cached result in another language
         feature_name_with_lang = '{}_{}'.format(feature_name,  get_user_lang(chat_id))
 
-        # It's high time to call reevaluate result instead of just looking up in cache if countdown went off, if
+        # It's high time to reevaluate result instead of just looking up in cache if countdown went off, if
         # function has not been called yet, if result for feature (like camera, lens or country) not in cache
         high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
+
         if not when_was_called or high_time or feature_name_with_lang not in result:
             when_was_called = datetime.now()
-
             result[feature_name_with_lang] = func(feature_name, device_type, chat_id)
             return result[feature_name_with_lang]
         else:
@@ -448,7 +452,7 @@ def cache_most_popular_items(func, cache_time):
     another language.
 
     :param func: some expensive function that we don't want to call too often because it can slow down the script
-    :param cache_time: minutes how much to wait between real func calling and returning cached result
+    :param cache_time: time in minutes how much to wait between real function calling and returning cached result
     :return: wrapper that figure out when to call function and when to return cached result
     """
     when_was_called = None  # store time when given function was called last time
@@ -477,15 +481,24 @@ def cache_most_popular_items(func, cache_time):
 
 
 def get_address(latitude, longitude, lang):
-    # start_time = datetime.now()
-    # Get address as a string by coordinates from photo that user sent to bot
+
+    """
+     # Get address as a string by coordinates from photo that user sent to bot
+    :param latitude:
+    :param longitude:
+    :param lang: preferred user language
+    :return: address as a string where photo was taken; name of country in English and Russian to keep statistics
+    of the most popular countries among users of the bot
+    """
 
     coordinates = "{}, {}".format(latitude, longitude)
-    log.info('Getting address from coordinates {}...'.format(coordinates))
+    log.debug('Getting address from coordinates {}...'.format(coordinates))
     geolocator = Nominatim()
 
     try:
         location = geolocator.reverse(coordinates, language=lang)
+
+        # Get name of the country in English and Russian language
         if lang == 'en':
             country_en = location.raw['address']['country']
             second_lang = 'ru'
@@ -498,27 +511,33 @@ def get_address(latitude, longitude, lang):
             location2 = geolocator.reverse(coordinates, language=second_lang)
             location2_raw = location2.raw
             country_en = location2_raw['address']['country']
-        # log.debug("It took {} seconds for get_address function to do the job".format((datetime.now() -
-        #                                                                               start_time).seconds))
         return location.address, (country_en, country_ru)
-    except:
+    except:  # Never know what can happen
         log.error('Getting address failed!')
         log.error(traceback.format_exc())
         return False
 
 
-# Convert exif gps to format that accepts Telegram (and Google Maps for example)
 def get_coordinates_from_exif(data, chat_id):
+    """
+    # Convert GPS coordinates from format in which they are stored in EXIF of photo
+     to format that accepts Telegram (and Google Maps for example)
+
+    :param data: EXIF data extracted from photo
+    :param chat_id: user id
+    :return: either floats that represents longitude and latitude or string with error message dedicated to user
+    """
+
     current_user_lang = get_user_lang(chat_id)
 
-    # convert ifdtag from exifread module to decimal degree format of coordinate
     def idf_tag_to_coordinate(tag):
+        # Convert ifdtag from exifread module to decimal degree format of coordinate
         tag = str(tag).replace('[', '').replace(']', '').split(',')
         if '/' in tag[2]:
-            # Slit string like '4444/5555' and divide first one by second one
+            # Split string like '4444/5555' and divide first integer by second one
             tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
         elif '/' not in tag[2]:
-            # Rare case so far - when there is just a number
+            # Rare case so far - when there is just a number, not ratio
             tag[2] = int(tag[2])
         else:
             log.warning('Can\'t read gps from file!')
@@ -526,8 +545,7 @@ def get_coordinates_from_exif(data, chat_id):
 
         return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
 
-    try:
-        # lat, lon = exif_to_dd(raw_coordinates)
+    try:  # Extract data from EXIF
         lat_ref = str(data['GPS GPSLatitudeRef'])
         raw_lat = data['GPS GPSLatitude']
         lon_ref = str(data['GPS GPSLongitudeRef'])
@@ -539,6 +557,7 @@ def get_coordinates_from_exif(data, chat_id):
     # Return positive or negative longitude/latitude from exifread's ifdtag
     lat = -(idf_tag_to_coordinate(raw_lat)) if lat_ref == 'S' else idf_tag_to_coordinate(raw_lat)
     lon = -(idf_tag_to_coordinate(raw_lon)) if lon_ref == 'W' else idf_tag_to_coordinate(raw_lon)
+
     if lat is False or lon is False:
         log.error('Cannot read coordinates of this photo.')
         raw_coordinates = ('Latitude reference: {}\n.Raw latitude: {}\n.Longitude reference: {}\n.'
@@ -549,24 +568,24 @@ def get_coordinates_from_exif(data, chat_id):
     elif lat < 1 and lon < 1:
         log.info('There are zero GPS coordinates in this photo.')
         return lang_msgs[current_user_lang]['bad_gps']
-
     else:
         return lat, lon
 
 
 def check_camera_tags(tags):
     """
-    Function that convert stupid code name of the phone or camera from EXIF to meaningful one by looking a
+    Function that convert stupid code name of a smartphone or camera from EXIF to meaningful one by looking a
     collation in a special MySQL table
     For example instead of just Nikon there can be NIKON CORPORATION in EXIF
-    :param tags: name of a camera and lens
+
+    :param tags: name of a camera and lens from EXIF
     :return: list with one or two strings which are name of camera and/or lens. If there is not better name
     for the gadget in database, function just returns name how it is
     """
     checked_tags = []
 
     for tag in tags:
-        if tag:  # if there was this information inside EXIF of the photo
+        if tag:  # If there was this information inside EXIF of the photo
             tag = str(tag).strip()
             log.info('Looking up collation for {}'.format(tag))
             try:
@@ -575,8 +594,8 @@ def check_camera_tags(tags):
                 if cursor.rowcount:
                     tag = cursor.fetchone()[0]  # Get appropriate tag from the table
                     log.info('Tag after looking up in tag_tables - {}.'.format(tag))
-            except (MySQLdb.Error, MySQLdb.Warning) as e:
-                log.error(e)
+            except (MySQLdb.Error, MySQLdb.Warning) as err:
+                log.error(err)
 
         checked_tags.append(tag)
     return checked_tags
@@ -584,17 +603,18 @@ def check_camera_tags(tags):
 
 def get_most_popular_items(item_type, chat_id):
     """
-    Get most common cameras/lenses from database and make list of them
+    Get most common cameras/lenses/countries from database and make list of them
     :param item_type: string with column name to choose between cameras, lenses and countries
     :param chat_id: id of user derived from telegram object message
     :return: string which is either list of most common cameras/lenses/countries or message which states that list is
     empty
     """
 
-    # Make python list to be string roster with indexes and new line characters like:
-    # 1. Canon 80D
-    # 2. iPhone 4S
     def list_to_ordered_str_list(list_of_gadgets):
+        # Make Python list to be string like roster with indexes and new line characters like:
+        # 1. Canon 80D
+        # 2. iPhone 4S
+
         string_roaster = ''
         index = 1
         for item in list_of_gadgets:
@@ -604,13 +624,16 @@ def get_most_popular_items(item_type, chat_id):
             index += 1
         return string_roaster
 
-    log.debug('Evaluating most popular gadgets...')
+    log.debug('Evaluating most popular things...')
     month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
 
     # This query returns item types in order where the first one item has the highest number of occurrences
     # in a given column
-    query = ('SELECT {0} FROM photo_queries_table WHERE time > "{1}" GROUP BY {0} '
-             'ORDER BY count({0}) DESC'.format(item_type, month_ago))
+    query = ('SELECT {0} FROM photo_queries_table '
+             'WHERE time > "{1}" '
+             'GROUP BY {0} '
+             'ORDER BY count({0}) '
+             'DESC'.format(item_type, month_ago))
     try:
         cursor = db.execute_query(query)
         if not cursor.rowcount:
@@ -624,11 +647,11 @@ def get_most_popular_items(item_type, chat_id):
         else:
             log.info('Finish evaluating the most popular items')
             return list_to_ordered_str_list(popular_items)
-    except (MySQLdb.Error, MySQLdb.Warning) as e:
-        log.error(e)
+    except (MySQLdb.Error, MySQLdb.Warning) as err:
+        log.error(err)
 
 
-# Make closures
+# Make closures to cache result of functions (integer represent time before address to database
 get_most_popular_cams_cached = cache_most_popular_items(get_most_popular_items, 5)
 get_most_popular_lens_cached = cache_most_popular_items(get_most_popular_items, 5)
 get_most_popular_countries_cached = cache_most_popular_items(get_most_popular_items, 5)
