@@ -1,5 +1,8 @@
 # photoGPSbot
 
+[@photoGPSbot](https://telegram.me/photogpsbot)
+[@photoGPSbot on GitHub](https://github.com/RandyRomero/photoGPSbot)
+
 *Bot for Telegram that receives your photo and returns:*
  - map where the photo was taken (if there are coordinates in your photo)
  - time and date when the photo was taken
