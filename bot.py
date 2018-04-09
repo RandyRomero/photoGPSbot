@@ -303,9 +303,8 @@ def turn_bot_off():
 
 
 @bot.message_handler(commands=['start'])
-def create_main_keyboard(arg):
-    # arg can be integer that represent chat.id or message object from Telegram
-    chat_id = arg if isinstance(arg, int) else arg.chat.id
+def create_main_keyboard(message):
+    chat_id = message.chat.id
     current_user_lang = get_user_lang(chat_id)
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row('Русский/English')
@@ -326,10 +325,10 @@ def handle_menu_response(message):
         current_user_lang = change_user_language(chat_id, current_user_lang)
         if current_user_lang:
             bot.send_message(chat_id, lang_msgs[current_user_lang]['switch_lang_success'])
-            create_main_keyboard(chat_id)
+            create_main_keyboard(message)
         else:
             bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_failure'])
-            create_main_keyboard(chat_id)
+            create_main_keyboard(message)
 
     elif message.text == lang_msgs[current_user_lang]['top_cams']:
         log.info('User {} asked for top cams'.format(chat_id))
