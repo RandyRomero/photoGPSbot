@@ -1,6 +1,8 @@
 #!python3
 # -*- coding: utf-8 -*-
 
+# Messages for user both in English and Russian
+
 lang_msgs = {
     'ru-RU': {
         'menu_header': 'Отправь фото или выбери пункт:',

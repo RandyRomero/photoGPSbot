@@ -1,6 +1,9 @@
 #!python3
 # -*- coding: utf-8 -*-
 
+# Module that provides a way to connect ot MySQL and reconnect each time connection is lost. It also can
+# automatically set up SSH tunnel thank to sshtunnel module
+
 # Original way to do it was described at https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 
 import MySQLdb

@@ -22,7 +22,6 @@ from language_pack import lang_msgs
 import db_connector
 
 
-log.info('Starting photoGPSbot...')
 clean_log_folder(20)
 
 bot = telebot.TeleBot(config.token)
@@ -827,18 +826,18 @@ def handle_image(message):
 
     log.info(log_msg)
 
-    # get image
     file_id = bot.get_file(message.document.file_id)
-    # Get temporary link to photo that user has sent to bot
+    # Get temporary link to a photo that user has sent to bot
     file_path = file_id.file_path
-    # Get photo that got telegram bot from user
+    # Download photo that got telegram bot from user
     r = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format(config.token, file_path))
-    user_file = BytesIO(r.content)  # Get file-like object of user's photo
+    # Get file-like object of user's photo
+    user_file = BytesIO(r.content)
 
-    # Get coordinates
+    # Read data from photo and prepare answer for user with location and etc.
     read_exif_result = read_exif(user_file, message)
 
-    # Send to user message that there is no EXIF data in his picture
+    # Send message to user that there is no EXIF data in his picture
     if not read_exif_result:
         bot.reply_to(message, lang_msgs[current_user_lang]['no_exif'])
         return
@@ -846,7 +845,6 @@ def handle_image(message):
     answer, cam_info, country = read_exif_result
 
     # Send location and info about shot back to user
-
     if isinstance(answer[0], tuple):
         lat, lon = answer[0]
         bot.send_location(chat_id, lat, lon, live_period=None)
@@ -861,9 +859,7 @@ def handle_image(message):
         return
 
     # Sent to user only info about camera because there is no gps coordinates in his photo
-    # user_msg consists of message that there is no info about location and messages with photo details
     user_msg = '{}\n{}'.format(answer[0], answer[1])
-
     bot.reply_to(message, user_msg, parse_mode='Markdown')
     log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
                '{} ID: {}'.format(message.from_user.first_name,
@@ -882,6 +878,7 @@ else:
 
 
 def start_bot():
+    log.info('Starting photoGPSbot...')
     bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
 
 
