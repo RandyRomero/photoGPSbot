@@ -136,7 +136,7 @@ def set_user_language(chat_id, lang):
     # Actually we can set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
     # this function works well or not
     if len(user_lang) > 10:
-        clean_log_folder(2)
+        clean_old_user_languages_from_memory(2)
 
     log.info('User {} language was switched to {}'.format(chat_id, lang))
 
@@ -174,7 +174,7 @@ def get_user_lang(chat_id):
             user_lang[chat_id] = lang
 
         if len(user_lang) > 10:
-            clean_log_folder(2)
+            clean_old_user_languages_from_memory(2)
 
     return lang
 
