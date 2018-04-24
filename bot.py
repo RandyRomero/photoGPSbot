@@ -5,11 +5,13 @@
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/photoGPSbot
 
+import os
 import sys
 import time
 import MySQLdb
 import telebot
 from telebot import types
+from telebot import apihelper
 import exifread
 import requests
 from io import BytesIO
@@ -25,6 +27,9 @@ import db_connector
 clean_log_folder(20)
 
 bot = telebot.TeleBot(config.token)
+if not os.path.exists('prod.txt'):
+    log.info('Working through proxy.')
+    apihelper.proxy = {'https': config.proxy_config}
 
 # Connect to database
 db = db_connector.DB()
@@ -286,7 +291,9 @@ def get_admin_stat(command):
         # datetime.timedelta.seconds returns you total number of seconds since given time, so you need to perform
         # a little bit of math to make whole hours, minutes and seconds from it
         # And there isn't any normal way to do it in Python unfortunately
-        return fmt.format(td.days, td.seconds // 3600, td.seconds % 3600 // 60, td.seconds % 60)
+        uptime = fmt.format(td.days, td.seconds // 3600, td.seconds % 3600 // 60, td.seconds % 60)
+        log.info(uptime)
+        return uptime
 
 
 def turn_bot_off():
@@ -830,7 +837,12 @@ def handle_image(message):
     # Get temporary link to a photo that user has sent to bot
     file_path = file_id.file_path
     # Download photo that got telegram bot from user
-    r = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format(config.token, file_path))
+    if os.path.exists('prod.txt'):
+        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format(config.token, file_path))
+    else:
+        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format(config.token, file_path),
+                         proxies={'https': config.proxy_config})
+
     # Get file-like object of user's photo
     user_file = BytesIO(r.content)
 
