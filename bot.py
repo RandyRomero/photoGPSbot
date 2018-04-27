@@ -8,6 +8,7 @@
 import os
 import sys
 import time
+import json
 import MySQLdb
 import telebot
 from telebot import types
@@ -20,11 +21,15 @@ from datetime import datetime, timedelta
 from geopy.geocoders import Nominatim
 import config
 from handle_logs import log, clean_log_folder
-from language_pack import lang_msgs
 import db_connector
 
 
 clean_log_folder(20)
+
+# Load file with messages for user in two languages
+with open('language_pack.txt', 'r', encoding='utf8') as json_file:
+    messages = json.load(json_file)
+# json_file = open('language_pack.txt', 'r', encoding='utf8')
 
 bot = telebot.TeleBot(config.token)
 if not os.path.exists('prod.txt'):
@@ -298,7 +303,7 @@ def get_admin_stat(command):
 
 def turn_bot_off():
     # Safely turn bot off
-    bot.send_message(config.me, lang_msgs[get_user_lang(config.me)]['bye'])
+    bot.send_message(config.me, messages[get_user_lang(config.me)]['bye'])
     if db.disconnect():
         log.info('Please wait for a sec, bot is turning off...')
         bot.stop_polling()
@@ -314,10 +319,10 @@ def create_main_keyboard(message):
     current_user_lang = get_user_lang(chat_id)
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.row('Русский/English')
-    markup.row(lang_msgs[current_user_lang]['top_cams'])
-    markup.row(lang_msgs[current_user_lang]['top_lens'])
-    markup.row(lang_msgs[current_user_lang]['top_countries'])
-    bot.send_message(chat_id, lang_msgs[current_user_lang]['menu_header'], reply_markup=markup)
+    markup.row(messages[current_user_lang]['top_cams'])
+    markup.row(messages[current_user_lang]['top_lens'])
+    markup.row(messages[current_user_lang]['top_countries'])
+    bot.send_message(chat_id, messages[current_user_lang]['menu_header'], reply_markup=markup)
 
 
 @bot.message_handler(content_types=['text'])  # Decorator to handle text messages
@@ -330,23 +335,23 @@ def handle_menu_response(message):
 
         current_user_lang = change_user_language(chat_id, current_user_lang)
         if current_user_lang:
-            bot.send_message(chat_id, lang_msgs[current_user_lang]['switch_lang_success'])
+            bot.send_message(chat_id, messages[current_user_lang]['switch_lang_success'])
             create_main_keyboard(message)
         else:
-            bot.send_message(chat_id, lang_msgs[get_user_lang(chat_id)]['switch_lang_failure'])
+            bot.send_message(chat_id, messages[get_user_lang(chat_id)]['switch_lang_failure'])
             create_main_keyboard(message)
 
-    elif message.text == lang_msgs[current_user_lang]['top_cams']:
+    elif message.text == messages[current_user_lang]['top_cams']:
         log.info('User {} asked for top cams'.format(chat_id))
         bot.send_message(chat_id, text=get_most_popular_cams_cached('camera_name', chat_id))
         log.info('List of most popular cameras has been returned to {} '.format(chat_id))
 
-    elif message.text == lang_msgs[current_user_lang]['top_lens']:
+    elif message.text == messages[current_user_lang]['top_lens']:
         log.info('User {} asked for top lens'.format(chat_id))
         bot.send_message(chat_id, text=get_most_popular_lens_cached('lens_name', chat_id))
         log.info('List of most popular lens has been returned to {} '.format(chat_id))
 
-    elif message.text == lang_msgs[current_user_lang]['top_countries']:
+    elif message.text == messages[current_user_lang]['top_countries']:
         log.info('User {} asked for top countries'.format(chat_id))
         table_name = 'country_ru' if current_user_lang == 'ru-RU' else 'country_en'
         bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
@@ -373,7 +378,7 @@ def handle_menu_response(message):
                                                                                         message.from_user.id))
 
         # Answer to user that bot can't make a conversation with him
-        bot.send_message(chat_id, lang_msgs[current_user_lang]['dont_speak'])
+        bot.send_message(chat_id, messages[current_user_lang]['dont_speak'])
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -399,7 +404,7 @@ def admin_menu(call):
 
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
-    bot.send_message(message.chat.id, lang_msgs[get_user_lang(message.chat.id)]['as_file'])
+    bot.send_message(message.chat.id, messages[get_user_lang(message.chat.id)]['as_file'])
     log_message = ('Name: {} Last name: {} Nickname: {} ID: {} sent '
                    'photo as a photo.'.format(message.from_user.first_name,
                                               message.from_user.last_name,
@@ -558,7 +563,7 @@ def get_coordinates_from_exif(data, chat_id):
         raw_lon = data['GPS GPSLongitude']
     except KeyError:
         log.info('This picture doesn\'t contain coordinates.')
-        return lang_msgs[current_user_lang]['no_gps']
+        return messages[current_user_lang]['no_gps']
 
     # Return positive or negative longitude/latitude from exifread's ifdtag
     lat = -(idf_tag_to_coordinate(raw_lat)) if lat_ref == 'S' else idf_tag_to_coordinate(raw_lat)
@@ -570,10 +575,10 @@ def get_coordinates_from_exif(data, chat_id):
                            'Raw longitude: {}.'.format(lat_ref, raw_lat, lon_ref, raw_lon))
         log.info(raw_coordinates)
         bot.send_message(config.me, text=('Cannot read these coordinates: ' + raw_coordinates))
-        return lang_msgs[current_user_lang]['bad_gps']
+        return messages[current_user_lang]['bad_gps']
     elif lat < 1 and lon < 1:
         log.info('There are zero GPS coordinates in this photo.')
-        return lang_msgs[current_user_lang]['bad_gps']
+        return messages[current_user_lang]['bad_gps']
     else:
         return lat, lon
 
@@ -644,7 +649,7 @@ def get_most_popular_items(item_type, chat_id):
         cursor = db.execute_query(query)
         if not cursor.rowcount:
             log.info('Can\'t evaluate a list of the most popular items')
-            return lang_msgs[get_user_lang(chat_id)]['no_top']
+            return messages[get_user_lang(chat_id)]['no_top']
 
         popular_items = cursor.fetchall()
         if len(popular_items) > 30:
@@ -682,11 +687,11 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
     if feature_type == 'camera_name':
         # asterisks for markdown - to make font bold
         log.debug('row: ' + str(row))
-        answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['camera_users'], str(row-1))
+        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
-        answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['lens_users'], str(row - 1))
+        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['lens_users'], str(row - 1))
     elif feature_type == 'country_en':
-        answer += '*{}*{}.'.format(lang_msgs[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
+        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
 
     return answer
 
@@ -809,7 +814,7 @@ def read_exif(image, message):
 
     # Make user message about camera from exif
     info_about_shot = ''
-    for tag, item in zip(lang_msgs[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens, address]):
+    for tag, item in zip(messages[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens, address]):
         if item:
             info_about_shot += '*{}*: {}\n'.format(tag, item)
 
@@ -825,7 +830,7 @@ def read_exif(image, message):
 def handle_image(message):
     chat_id = message.chat.id
     current_user_lang = get_user_lang(chat_id)
-    bot.reply_to(message, lang_msgs[current_user_lang]['photo_prcs'])
+    bot.reply_to(message, messages[current_user_lang]['photo_prcs'])
     log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(message.from_user.first_name,
                                                                                          message.from_user.last_name,
                                                                                          message.from_user.username,
@@ -851,7 +856,7 @@ def handle_image(message):
 
     # Send message to user that there is no EXIF data in his picture
     if not read_exif_result:
-        bot.reply_to(message, lang_msgs[current_user_lang]['no_exif'])
+        bot.reply_to(message, messages[current_user_lang]['no_exif'])
         return
 
     answer, cam_info, country = read_exif_result

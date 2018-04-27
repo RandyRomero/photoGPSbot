@@ -1,0 +1,54 @@
+{
+    "en-US": {
+        "as_file": "Sorry, but it would be better if you send your photo as a file. If you send it just as a photo, Telegram will get rid of location and data in order to compress the photo.",
+        "bad_gps": "Cannot read GPS from this photo.",
+        "bye": "Goodbye! Bot is turning off...",
+        "camera_info": [
+            "Date",
+            "Camera brand",
+            "Lens brand",
+            "Address"
+        ],
+        "camera_users": "Number of users with this camera: ",
+        "dont_speak": "I cannot speak, but if you send me a photo (as a file), I will send you back the location where it was taken, time of shooting and camera info.",
+        "lens_users": "Number of users with this lens: ",
+        "menu_header": "Send photo or choose one of the options below:",
+        "no_exif": "This photo does not contain any data. Maybe you have another one?",
+        "no_gps": "This photo does not have info about location. Try another one.",
+        "no_top": "The list is empty - you can be first!",
+        "oops": "This feature is coming soon. But if you send me a photo (as a file), I will send you back the location where it was taken",
+        "photo_prcs": "Wait a sec... *sounds of heavy machinery*",
+        "photos_from_country": "Number of users that also sent photo from this country: ",
+        "switch_lang_failure": "I can't change language. Try again later.",
+        "switch_lang_success": "Now I'm speaking English.",
+        "top_cams": "The most popular cameras/smartphones",
+        "top_countries": "The most popular countries",
+        "top_lens": "The most popular lens"
+    },
+    "ru-RU": {
+        "as_file": "Прости, но фотографию нужно отправлять, как файл. Если отправлять её просто как фото, то Telegram сожмёт её и выбросит данные о местоположении, и я не смогу тебе его прислать.",
+        "bad_gps": "Не могу распознать формат GPS-данных.",
+        "bye": "Бот прощается с вами!",
+        "camera_info": [
+            "Дата съёмки",
+            "Камера",
+            "Объектив",
+            "Адрес"
+        ],
+        "camera_users": "Пользователей c такой же камерой: ",
+        "dont_speak": "Я не умею разговаривать, но, если ты пришлёшь мне фотографию, я отправлю тебе карту с указанием, где эта фотография была сделана, дату съёмки и информацию о камере.",
+        "lens_users": "Пользователей c таким же объективом: ",
+        "menu_header": "Отправь фото или выбери пункт:",
+        "no_exif": "В этой фотографии нет EXIF-данных.",
+        "no_gps": "Это фотография не имеет GPS-данных. Попробуй другую.",
+        "no_top": "Список пуст - прекрасный шанс возглавить его!",
+        "oops": "Упс! Эта фича пока еще в разработке. Но, если ты пришлёшь мне фотографию, я отправлю тебе карту с указанием, где эта фотография была сделана",
+        "photo_prcs": "Поймал! Обрабатываю...",
+        "photos_from_country": "Пользователей, которые тоже отправили фото из этой страны: ",
+        "switch_lang_failure": "Не удалось сменить язык. Попробуйте позже.",
+        "switch_lang_success": "Теперь я говорю по-русски!",
+        "top_cams": "Самые популярные смартфоны/камеры пользователей бота",
+        "top_countries": "Самые популярные страны пользователей бота",
+        "top_lens": "Самые популярные объективы пользователей бота"
+    }
+}
