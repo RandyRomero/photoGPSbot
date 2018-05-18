@@ -371,10 +371,11 @@ def handle_menu_response(message):
         bot.send_message(config.me, 'Admin commands', reply_markup=keyboard)
 
     else:
-        log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(message.from_user.first_name,
-                                                                                        message.from_user.last_name,
-                                                                                        message.from_user.username,
-                                                                                        message.from_user.id))
+        msg = message.from_user
+        log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(msg.first_name,
+                                                                                        msg.last_name,
+                                                                                        msg.username,
+                                                                                        msg.id))
 
         # Answer to user that bot can't make a conversation with him
         bot.send_message(chat_id, messages[current_user_lang]['dont_speak'])
@@ -403,11 +404,9 @@ def admin_menu(call):  # Respond commands from admin menu
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
     bot.send_message(message.chat.id, messages[get_user_lang(message.chat.id)]['as_file'])
+    msg = message.from_user
     log_message = ('Name: {} Last name: {} Nickname: {} ID: {} sent '
-                   'photo as a photo.'.format(message.from_user.first_name,
-                                              message.from_user.last_name,
-                                              message.from_user.username,
-                                              message.from_user.id))
+                   'photo as a photo.'.format(msg.first_name, msg.last_name, msg.username, msg.id))
     log.info(log_message)
 
 
@@ -714,9 +713,10 @@ def save_user_query_info(data, message, country=None):
     camera_name = 'NULL' if not camera_name else '{0}{1}{0}'.format('"', camera_name)
     lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
     chat_id = message.chat.id
-    first_name = 'NULL' if not message.from_user.first_name else '{0}{1}{0}'.format('"', message.from_user.first_name)
-    last_name = 'NULL' if not message.from_user.last_name else '{0}{1}{0}'.format('"', message.from_user.last_name)
-    username = 'NULL' if not message.from_user.username else '{0}{1}{0}'.format('"', message.from_user.username)
+    msg = message.from_user
+    first_name = 'NULL' if not msg.first_name else '{0}{1}{0}'.format('"', msg.first_name)
+    last_name = 'NULL' if not msg.last_name else '{0}{1}{0}'.format('"', msg.last_name)
+    username = 'NULL' if not msg.username else '{0}{1}{0}'.format('"', msg.username)
     if not country:
         country_en = country_ru = 'NULL'
     else:
@@ -829,10 +829,11 @@ def handle_image(message):
     chat_id = message.chat.id
     current_user_lang = get_user_lang(chat_id)
     bot.reply_to(message, messages[current_user_lang]['photo_prcs'])
-    log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(message.from_user.first_name,
-                                                                                         message.from_user.last_name,
-                                                                                         message.from_user.username,
-                                                                                         message.from_user.id))
+    msg = message.from_user
+    log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(msg.first_name,
+                                                                                         msg.last_name,
+                                                                                         msg.username,
+                                                                                         msg.id))
 
     log.info(log_msg)
 
@@ -859,16 +860,19 @@ def handle_image(message):
 
     answer, cam_info, country = read_exif_result
 
+    msg = message.from_user
+
     # Send location and info about shot back to user
     if isinstance(answer[0], tuple):
         lat, lon = answer[0]
         bot.send_location(chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[1], parse_mode='Markdown')
+
         log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
-                   '{} ID: {}'.format(message.from_user.first_name,
-                                      message.from_user.last_name,
-                                      message.from_user.username,
-                                      message.from_user.id))
+                   '{} ID: {}'.format(msg.first_name,
+                                      msg.last_name,
+                                      msg.username,
+                                      msg.id))
 
         log.info(log_msg)
         return
@@ -877,10 +881,10 @@ def handle_image(message):
     user_msg = '{}\n{}'.format(answer[0], answer[1])
     bot.reply_to(message, user_msg, parse_mode='Markdown')
     log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
-               '{} ID: {}'.format(message.from_user.first_name,
-                                  message.from_user.last_name,
-                                  message.from_user.username,
-                                  message.from_user.id))
+               '{} ID: {}'.format(msg.first_name,
+                                  msg.last_name,
+                                  msg.username,
+                                  msg.id))
     log.info(log_msg)
 
 
