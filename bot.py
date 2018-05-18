@@ -29,7 +29,6 @@ clean_log_folder(20)
 # Load file with messages for user in two languages
 with open('language_pack.txt', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
-# json_file = open('language_pack.txt', 'r', encoding='utf8')
 
 bot = telebot.TeleBot(config.token)
 if not os.path.exists('prod.txt'):
@@ -343,18 +342,18 @@ def handle_menu_response(message):
 
     elif message.text == messages[current_user_lang]['top_cams']:
         log.info('User {} asked for top cams'.format(chat_id))
-        bot.send_message(chat_id, text=get_most_popular_cams_cached('camera_name', chat_id))
+        bot.send_message(chat_id, text=get_most_popular_items('camera_name', chat_id))
         log.info('List of most popular cameras has been returned to {} '.format(chat_id))
 
     elif message.text == messages[current_user_lang]['top_lens']:
         log.info('User {} asked for top lens'.format(chat_id))
-        bot.send_message(chat_id, text=get_most_popular_lens_cached('lens_name', chat_id))
+        bot.send_message(chat_id, text=get_most_popular_items('lens_name', chat_id))
         log.info('List of most popular lens has been returned to {} '.format(chat_id))
 
     elif message.text == messages[current_user_lang]['top_countries']:
         log.info('User {} asked for top countries'.format(chat_id))
-        table_name = 'country_ru' if current_user_lang == 'ru-RU' else 'country_en'
-        bot.send_message(chat_id, text=get_most_popular_countries_cached(table_name, chat_id))
+        lang_table_name = 'country_ru' if current_user_lang == 'ru-RU' else 'country_en'
+        bot.send_message(chat_id, text=get_most_popular_items(lang_table_name, chat_id))
         log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
     elif message.text.lower() == 'admin' and chat_id == config.me:
@@ -382,8 +381,7 @@ def handle_menu_response(message):
 
 
 @bot.callback_query_handler(func=lambda call: True)
-def admin_menu(call):
-    # Respond commands from admin menu
+def admin_menu(call):  # Respond commands from admin menu
     bot.answer_callback_query(callback_query_id=call.id, show_alert=False)  # Remove progress bar from pressed button
 
     if call.data == 'off':
@@ -422,7 +420,7 @@ def dedupe_string(string):
     return deduped_string.rstrip()
 
 
-def cache_number_users_with_same_feature(func, cache_time):
+def cache_number_users_with_same_feature(func):
     # Closure to cache previous results of given function so to not call database to much
     # It saves result in a dictionary because result depends on a user.
     # cache_time - time in minutes when will be returned cached result instead of calling database
@@ -434,28 +432,29 @@ def cache_number_users_with_same_feature(func, cache_time):
         nonlocal func
         nonlocal result
         nonlocal when_was_called
+        cache_time = 5
 
-        # Add language tag to feature name to avoid returning to user cached result in another language
-        feature_name_with_lang = '{}_{}'.format(feature_name,  get_user_lang(chat_id))
+        # Make id in order to cache and return result by feature_type and language of user
+        result_id = '{}_{}'.format(feature_name, get_user_lang(chat_id))
 
         # It's high time to reevaluate result instead of just looking up in cache if countdown went off, if
         # function has not been called yet, if result for feature (like camera, lens or country) not in cache
         high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
 
-        if not when_was_called or high_time or feature_name_with_lang not in result:
+        if not when_was_called or high_time or result_id not in result:
             when_was_called = datetime.now()
-            result[feature_name_with_lang] = func(feature_name, device_type, chat_id)
-            return result[feature_name_with_lang]
+            result[result_id] = func(feature_name, device_type, chat_id)
+            return result[result_id]
         else:
             log.info('Returning cached result of ' + func.__name__)
             time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
             log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
-            return result[feature_name_with_lang]
+            return result[result_id]
 
     return func_launcher
 
 
-def cache_most_popular_items(func, cache_time):
+def cache_most_popular_items(func):
     """
     Function that prevent calling any given function more often that once in a cache_time.
     It calls given function, then during next cache_time  it will return cached result of a given function.
@@ -463,7 +462,6 @@ def cache_most_popular_items(func, cache_time):
     another language.
 
     :param func: some expensive function that we don't want to call too often because it can slow down the script
-    :param cache_time: time in minutes how much to wait between real function calling and returning cached result
     :return: wrapper that figure out when to call function and when to return cached result
     """
     when_was_called = None  # store time when given function was called last time
@@ -473,20 +471,27 @@ def cache_most_popular_items(func, cache_time):
         nonlocal func
         nonlocal result
         nonlocal when_was_called
-        lang = get_user_lang(chat_id)
+        cache_time = 5
+
+        # Only top countries can be returned in different languages.
+        # For the other types of queries it doesn't mean a thing.
+        if item_type == 'country_ru' or item_type == 'country_en':
+            result_id = get_user_lang(chat_id) + item_type
+        else:
+            result_id = item_type
 
         # evaluate boolean whether it is high time to call given function or not
         high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
 
-        if not result.get(lang, None) or not when_was_called or high_time:
+        if not result.get(result_id, None) or not when_was_called or high_time:
             when_was_called = datetime.now()
-            result[lang] = func(item_type, chat_id)
-            return result[lang]
+            result[result_id] = func(item_type, chat_id)
+            return result[result_id]
         else:
             log.debug('Return cached result of {}...'.format(func.__name__))
             time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
             log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
-            return result[lang]
+            return result[result_id]
 
     return function_launcher
 
@@ -523,7 +528,7 @@ def get_address(latitude, longitude, lang):
             location2_raw = location2.raw
             country_en = location2_raw['address']['country']
         return location.address, (country_en, country_ru)
-    except:  # Never know what can happen
+    except:  # You never know what god can bring to us
         log.error('Getting address failed!')
         log.error(traceback.format_exc())
         return False
@@ -612,6 +617,7 @@ def check_camera_tags(tags):
     return checked_tags
 
 
+@cache_most_popular_items
 def get_most_popular_items(item_type, chat_id):
     """
     Get most common cameras/lenses/countries from database and make list of them
@@ -636,7 +642,8 @@ def get_most_popular_items(item_type, chat_id):
         return string_roaster
 
     log.debug('Evaluating most popular things...')
-    month_ago = datetime.strftime(datetime.now() - timedelta(30), '%Y-%m-%d %H:%M:%S')
+    # arguments passed into timedelta is number of days
+    month_ago = datetime.strftime(datetime.now() - timedelta(120), '%Y-%m-%d %H:%M:%S')
 
     # This query returns item types in order where the first one item has the highest number of occurrences
     # in a given column
@@ -662,12 +669,7 @@ def get_most_popular_items(item_type, chat_id):
         log.error(err)
 
 
-# Make closures to cache result of functions (integer represent time before address to database
-get_most_popular_cams_cached = cache_most_popular_items(get_most_popular_items, 5)
-get_most_popular_lens_cached = cache_most_popular_items(get_most_popular_items, 5)
-get_most_popular_countries_cached = cache_most_popular_items(get_most_popular_items, 5)
-
-
+@cache_number_users_with_same_feature
 def get_number_users_by_feature(feature_name, feature_type, chat_id):
     """
     Get number of users that have same smartphone, camera, lens or that have been to the same country
@@ -694,10 +696,6 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
         answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
 
     return answer
-
-
-# Make closure which preserves result of the function in order not to call database too often
-get_number_users_with_same_feature = cache_number_users_with_same_feature(get_number_users_by_feature, 5)
 
 
 def save_user_query_info(data, message, country=None):
@@ -807,9 +805,9 @@ def read_exif(image, message):
     else:
         save_user_query_info(camera_info, message)
 
-    others_with_this_cam = get_number_users_with_same_feature(camera, 'camera_name', chat_id)
-    others_with_this_lens = get_number_users_with_same_feature(lens, 'lens_name', chat_id) if lens else None
-    others_from_this_country = (get_number_users_with_same_feature(country[0], 'country_en', chat_id)
+    others_with_this_cam = get_number_users_by_feature(camera, 'camera_name', chat_id)
+    others_with_this_lens = get_number_users_by_feature(lens, 'lens_name', chat_id) if lens else None
+    others_from_this_country = (get_number_users_by_feature(country[0], 'country_en', chat_id)
                                 if country else None)
 
     # Make user message about camera from exif
