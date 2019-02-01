@@ -1,10 +1,9 @@
-#!python3
-# -*- coding: utf-8 -*-
-
-# Module that provides a way to connect ot MySQL and reconnect each time connection is lost. It also can
+# Module that provides a way to connect ot MySQL and reconnect each time
+# connection is lost. It also can
 # automatically set up SSH tunnel thank to sshtunnel module
 
-# Original way to do it was described at https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
+# Original way to do it was described at
+# https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 
 import MySQLdb
 import os
@@ -32,8 +31,11 @@ class DB:
 
     def connect(self):
         log.info('Connecting to database...')
-        self.conn = MySQLdb.connect('OloloRodriguez.mysql.pythonanywhere-services.com', 'OloloRodriguez',
-                                    config.db_password, 'OloloRodriguez$photogpsbot', charset='utf8')
+        self.conn = MySQLdb.connect(host='localhost',
+                                    user='photogpsbot',
+                                    passwd=config.db_password,
+                                    db='photogpsbot',
+                                    charset='utf8')
         log.info('Success.')
 
     def connect_through_ssh(self):
