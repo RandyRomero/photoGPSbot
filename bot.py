@@ -1,7 +1,5 @@
-#!python3
-# -*- coding: utf-8 -*-
-
-# Small bot for Telegram that receive your photo and return you map where it was taken.
+# Small bot for Telegram that receive your photo and return you map where
+# it was taken.
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/photoGPSbot
 
@@ -39,14 +37,17 @@ if not os.path.exists('prod.txt'):
 db = db_connector.DB()
 if not db:
     log.error('Can\'t connect to db.')
-    bot.send_message(config.me, text='photoGPSbot can\'t connect to MySQL database!')
+    bot.send_message(config.me,
+                     text='photoGPSbot can\'t connect to MySQL database!')
 
-user_lang = {}  # Dictionary that contains user_id -- preferred language for every active user
+# Dictionary that contains user_id -- preferred language for every active user
+user_lang = {}
 
 
 def load_last_user_languages(max_users):
     """
-    Function that caches preferred language of last active users from database to pc memory
+    Function that caches preferred language of last active users from database
+    to pc memory
     :param max_users: number of entries to be cached
     :return: True if it completed work without errors, False otherwise
     """
@@ -65,21 +66,27 @@ def load_last_user_languages(max_users):
     try:
         cursor = db.execute_query(query)
     except (MySQLdb.Error, MySQLdb.Warning) as err:
-        log.warning(err)
+        # log.warning(err)
         bot.send_message(config.me, text=err)
         return False
 
     if cursor.rowcount:
         last_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
-        last_active_users = [chat_id[0] for chat_id in last_active_users_tuple_of_tuples]
+        last_active_users = [chat_id[0] for chat_id in
+                             last_active_users_tuple_of_tuples]
     else:
         log.warning('There are no last active users')
         return False
 
-    log.debug('Caching language preferences for {} last active users from database...'.format(max_users))
-    # Select from db with language preferences of users who were active recently
-    query = "SELECT chat_id, lang FROM user_lang_table WHERE chat_id in {};".format(tuple(last_active_users))
+    log.debug('Caching language preferences for %d '
+              'last active users from database...', max_users)
+    # Select from db with language preferences of users who
+    # were active recently
+    query = ("SELECT chat_id, lang "
+             "FROM user_lang_table "
+             "WHERE chat_id in {};".format(tuple(last_active_users)))
+
     cursor = db.execute_query(query)
     if cursor.rowcount:
         languages_of_users = cursor.fetchall()
@@ -93,7 +100,8 @@ def load_last_user_languages(max_users):
 
 
 def clean_old_user_languages_from_memory(max_users):
-    # Function to clean RAM from language preferences of users who used a bot a long time ago
+    # Function to clean RAM from language preferences of users
+    # who used a bot a long time ago
 
     global user_lang
 
@@ -117,12 +125,15 @@ def clean_old_user_languages_from_memory(max_users):
     if cursor.rowcount:
         least_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
-        least_active_users = [chat_id[0] for chat_id in least_active_users_tuple_of_tuples]
+        least_active_users = [chat_id[0]
+                              for chat_id
+                              in least_active_users_tuple_of_tuples]
     else:
         log.warning('There are no least active users')
         return False
 
-    log.info('Removing language preferences of {} least active users from memory...'.format(max_users))
+    log.info('Removing language preferences of %d least '
+             'active users from memory...', max_users)
     num_deleted_entries = 0
     for entry in least_active_users:
         log.debug('Deleting {}...'.format(entry))
@@ -647,10 +658,9 @@ def get_most_popular_items(item_type, chat_id):
     # This query returns item types in order where the first one item has the highest number of occurrences
     # in a given column
     query = ('SELECT {0} FROM photo_queries_table '
-             'WHERE time > "{1}" '
              'GROUP BY {0} '
              'ORDER BY count({0}) '
-             'DESC'.format(item_type, month_ago))
+             'DESC'.format(item_type))
     try:
         cursor = db.execute_query(query)
         if not cursor.rowcount:
@@ -888,8 +898,10 @@ def handle_image(message):
     log.info(log_msg)
 
 
-# I think you can safely cache several hundred or thousand of user-lang pairs without consuming to much memory,
-# but for development purpose I will set it to some minimum to be sure that calling to DB works properly
+# I think you can safely cache several hundred or thousand of
+# user-lang pairs without consuming to much memory, but for development
+# purpose I will set it to some minimum to be sure that
+# calling to DB works properly
 if load_last_user_languages(10):
     log.info('Users languages were cached.')
 else:
