@@ -3,6 +3,9 @@
 # Written by Aleksandr Mikheev.
 # https://github.com/RandyRomero/photoGPSbot
 
+# todo refactor imports
+# todo get rid of globals
+
 import os
 import sys
 import time
@@ -28,16 +31,16 @@ clean_log_folder(20)
 with open('language_pack.txt', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
 
-bot = telebot.TeleBot(config.token)
+bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
 if not os.path.exists('prod.txt'):
     log.info('Working through proxy.')
-    apihelper.proxy = {'https': config.proxy_config}
+    apihelper.proxy = {'https': config.PROXY_CONFIG}
 
 # Connect to database
 db = db_connector.DB()
 if not db:
     log.error('Can\'t connect to db.')
-    bot.send_message(config.me,
+    bot.send_message(config.MY_TELEGRAM,
                      text='photoGPSbot can\'t connect to MySQL database!')
 
 # Dictionary that contains user_id -- preferred language for every active user
@@ -65,10 +68,12 @@ def load_last_user_languages(max_users):
     log.info('Figure out last active users...')
     try:
         cursor = db.execute_query(query)
-    except (MySQLdb.Error, MySQLdb.Warning) as err:
-        # log.warning(err)
-        bot.send_message(config.me, text=err)
-        return False
+    except (MySQLdb.Error, MySQLdb.Warning) as e:
+        log.error("Cannot get the data from the database! Reason: %s", e)
+        bot.send_message(config.MY_TELEGRAM, "Cannot get the data from the "
+                                    f"database! Reason: {e}")
+        db.disconnect()
+        return
 
     if cursor.rowcount:
         last_active_users_tuple_of_tuples = cursor.fetchall()
@@ -77,7 +82,7 @@ def load_last_user_languages(max_users):
                              last_active_users_tuple_of_tuples]
     else:
         log.warning('There are no last active users')
-        return False
+        return
 
     log.debug('Caching language preferences for %d '
               'last active users from database...', max_users)
@@ -93,7 +98,8 @@ def load_last_user_languages(max_users):
         for line in languages_of_users:
             log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
             user_lang[line[0]] = line[1]
-        return True
+        log.info('Users languages were cached.')
+
     else:
         log.warning('There are no entries about user languages in database.')
         return False
@@ -119,7 +125,7 @@ def clean_old_user_languages_from_memory(max_users):
         cursor = db.execute_query(query)
     except (MySQLdb.Error, MySQLdb.Warning) as err:
         log.warning(err)
-        bot.send_message(config.me, text=err)
+        bot.send_message(config.MY_TELEGRAM, text=err)
         return False
 
     if cursor.rowcount:
@@ -186,7 +192,7 @@ def get_user_lang(chat_id):
             user_lang[chat_id] = lang
         else:
             lang = 'en-US'
-            bot.send_message(config.me, text='You have a new user!')
+            bot.send_message(config.MY_TELEGRAM, text='You have a new user!')
             log.info('User {} default language for bot is set to be en-US.'.format(chat_id))
             query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
             db.execute_query(query)
@@ -208,23 +214,28 @@ def change_user_language(chat_id, curr_lang):
         return new_lang
     except:  # who knows what god can send us
         log.error(traceback.format_exc())
-        bot.send_message(config.me, text=traceback.format_exc())
+        bot.send_message(config.MY_TELEGRAM, text=traceback.format_exc())
         return False
 
 
 def get_admin_stat(command):
     # Function that returns statistics to admin by command
-    global start_time
+    global start_time  # todo get rid of this global
     answer = 'There is some statistics for you: \n'
+
     # Set to a beginning of the day
-    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+    today = (datetime
+             .today()
+             .replace(hour=0, minute=0, second=0, microsecond=0)
+             .strftime('%Y-%m-%d %H:%M:%S'))
 
     # Last users with date of last time when they used bot
     if command == 'last active users':
-        log.info('Evaluating last active users with date of last time when they used bot...')
+        log.info('Evaluating last active users with date of '
+                 'last time when they used bot...')
         query = ('SELECT MAX(time), last_name, first_name, username '
                  'FROM photo_queries_table '
-                 'GROUP BY chat_id '
+                 'GROUP BY chat_id, last_name, first_name, username '
                  'ORDER BY MAX(time) '
                  'DESC LIMIT 100')
         cursor = db.execute_query(query)
@@ -234,7 +245,8 @@ def get_admin_stat(command):
             for item in user:
                 users += '{} '.format(item)
             users += '\n'
-        answer += 'Up to 100 last active users by the time when they sent picture last time:\n'
+        answer += 'Up to 100 last active users by the time ' \
+                  'when they sent picture last time:\n'
         answer += users
         log.info('Done.')
         return answer
@@ -247,7 +259,7 @@ def get_admin_stat(command):
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table '
-                 'WHERE chat_id !={}'.format(config.me))
+                 'WHERE chat_id !={}'.format(config.MY_TELEGRAM))
         cursor = db.execute_query(query)
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
@@ -264,7 +276,7 @@ def get_admin_stat(command):
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}" '
-                 'AND chat_id !={}'.format(today, config.me))
+                 'AND chat_id !={}'.format(today, config.MY_TELEGRAM))
         cursor = db.execute_query(query)
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
@@ -313,7 +325,8 @@ def get_admin_stat(command):
 
 def turn_bot_off():
     # Safely turn bot off
-    bot.send_message(config.me, messages[get_user_lang(config.me)]['bye'])
+    bot.send_message(config.MY_TELEGRAM,
+                     messages[get_user_lang(config.MY_TELEGRAM)]['bye'])
     if db.disconnect():
         log.info('Please wait for a sec, bot is turning off...')
         bot.stop_polling()
@@ -367,7 +380,7 @@ def handle_menu_response(message):
         bot.send_message(chat_id, text=get_most_popular_items(lang_table_name, chat_id))
         log.info('List of most popular countries has been returned to {} '.format(chat_id))
 
-    elif message.text.lower() == 'admin' and chat_id == config.me:
+    elif message.text.lower() == 'admin' and chat_id == config.MY_TELEGRAM:
         # It creates inline keyboard with options for admin
         # Function that handle user interaction with the keyboard called admin_menu
         keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
@@ -379,7 +392,8 @@ def handle_menu_response(message):
         keyboard.add(types.InlineKeyboardButton(text='Number of users', callback_data='number of users'))
         keyboard.add(types.InlineKeyboardButton(text='Number of gadgets', callback_data='number of gadgets'))
         keyboard.add(types.InlineKeyboardButton(text='Uptime', callback_data='uptime'))
-        bot.send_message(config.me, 'Admin commands', reply_markup=keyboard)
+        bot.send_message(config.MY_TELEGRAM,
+                         'Admin commands', reply_markup=keyboard)
 
     else:
         msg = message.from_user
@@ -399,17 +413,23 @@ def admin_menu(call):  # Respond commands from admin menu
     if call.data == 'off':
         turn_bot_off()
     elif call.data == 'last active':
-        bot.send_message(config.me, text=get_admin_stat('last active users'))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=get_admin_stat('last active users'))
     elif call.data == 'total number photos sent':
-        bot.send_message(config.me, text=get_admin_stat('total number photos sent'))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=get_admin_stat('total number photos sent'))
     elif call.data == 'photos today':
-        bot.send_message(config.me, text=get_admin_stat('photos today'))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=get_admin_stat('photos today'))
     elif call.data == 'number of users':
-        bot.send_message(config.me, text=get_admin_stat('number of users'))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=get_admin_stat('number of users'))
     elif call.data == 'number of gadgets':
-        bot.send_message(config.me, text=get_admin_stat('number of gadgets'))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=get_admin_stat('number of gadgets'))
     elif call.data == 'uptime':
-        bot.send_message(config.me, text=get_admin_stat('uptime'))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=get_admin_stat('uptime'))
 
 
 @bot.message_handler(content_types=['photo'])
@@ -589,7 +609,7 @@ def get_coordinates_from_exif(data, chat_id):
         raw_coordinates = ('Latitude reference: {}\n.Raw latitude: {}\n.Longitude reference: {}\n.'
                            'Raw longitude: {}.'.format(lat_ref, raw_lat, lon_ref, raw_lon))
         log.info(raw_coordinates)
-        bot.send_message(config.me, text=('Cannot read these coordinates: ' + raw_coordinates))
+        bot.send_message(config.MY_TELEGRAM, text=('Cannot read these coordinates: ' + raw_coordinates))
         return messages[current_user_lang]['bad_gps']
     elif lat < 1 and lon < 1:
         log.info('There are zero GPS coordinates in this photo.')
@@ -852,10 +872,12 @@ def handle_image(message):
     file_path = file_id.file_path
     # Download photo that got telegram bot from user
     if os.path.exists('prod.txt'):
-        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format(config.token, file_path))
+        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'
+                         .format(config.TELEGRAM_TOKEN, file_path))
     else:
-        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format(config.token, file_path),
-                         proxies={'https': config.proxy_config})
+        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'
+                         .format(config.TELEGRAM_TOKEN, file_path),
+                         proxies={'https': config.PROXY_CONFIG})
 
     # Get file-like object of user's photo
     user_file = BytesIO(r.content)
@@ -902,10 +924,7 @@ def handle_image(message):
 # user-lang pairs without consuming to much memory, but for development
 # purpose I will set it to some minimum to be sure that
 # calling to DB works properly
-if load_last_user_languages(10):
-    log.info('Users languages were cached.')
-else:
-    log.warning('Couldn\'t cache users\' languages.')
+load_last_user_languages(10)
 
 
 def start_bot():
