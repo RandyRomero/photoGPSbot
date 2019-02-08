@@ -4,3 +4,4 @@ __pycache__/
 log/
 prod.txt
 *.pyc
+.env
