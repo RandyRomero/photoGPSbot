@@ -1,80 +1,98 @@
 # Module that provides a way to connect ot MySQL and reconnect each time
 # connection is lost. It also can
-# automatically set up SSH tunnel thank to sshtunnel module
+# automatically set up SSH tunnel thanks to sshtunnel module
 
 # Original way to do it was described at
 # https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 
-import MySQLdb
 import os
+
+import MySQLdb
+import sshtunnel
+
 import config
 from handle_logs import log
 
 
 class DB:
+    """
+    Class that provides method to execute queries and handles connection to
+    the MySQL database directly and via ssh if necessary
+    """
     conn = None
     tunnel = None
     tunnel_opened = False
 
     def open_ssh_tunnel(self):
-        log.info('Establishing SSH tunnel to database...')
-        import sshtunnel
+        """
+        Method that opens ssh tunnel to the server where the database of
+        photoGPSbot is located
+        :return: None
+        """
+        log.debug('Establishing SSH tunnel to the server where the database '
+                 'is located...')
         sshtunnel.SSH_TIMEOUT = 5.0
         sshtunnel.TUNNEL_TIMEOUT = 5.0
         self.tunnel = sshtunnel.SSHTunnelForwarder(
-            'ssh.pythonanywhere.com',
-            ssh_username='OloloRodriguez', ssh_password=config.python_anywhere_password,
-            remote_bind_address=('OloloRodriguez.mysql.pythonanywhere-services.com', 3306))
+            ssh_address_or_host=config.SERVER_ADDRESS,
+            ssh_username=config.SSH_USER,
+            ssh_password=config.SSH_PASSWD,
+            ssh_port=22,
+            remote_bind_address=('127.0.0.1', 3306))
+
         self.tunnel.start()
         self.tunnel_opened = True
-        log.info('SSH tunnel has been established.')
+        log.debug('SSH tunnel has been established.')
 
     def connect(self):
-        log.info('Connecting to database...')
-        self.conn = MySQLdb.connect(host='localhost',
-                                    user='photogpsbot',
-                                    passwd=config.db_password,
-                                    db='photogpsbot',
-                                    charset='utf8')
-        log.info('Success.')
+        """
+        Established connection either to local database or to remote one if
+        the script runs not on the same server where database is located
+        :return: None
+        """
+        if os.path.exists('prod.txt'):
+            log.info('Connecting to the local database...')
+            port = 3306
+        else:
+            log.info('Connecting to database via SSH...')
+            if not self.tunnel_opened:
+                self.open_ssh_tunnel()
 
-    def connect_through_ssh(self):
-        log.info('Connecting to database through SSH...')
-        try:
-            self.conn = MySQLdb.connect(
-                user='OloloRodriguez', password=config.db_password,
-                host='127.0.0.1', port=self.tunnel.local_bind_port,
-                database='OloloRodriguez$photogpsbot', charset='utf8'
-            )
-            log.info('Success')
-        except:
-            log.error('Can\'t open SSH tunnel')
+            port=self.tunnel.local_bind_port
+
+        self.conn = MySQLdb.connect(host='127.0.0.1',
+                                    user=config.DB_USER,
+                                    password=config.DB_PASSWD,
+                                    port=port,
+                                    database=config.DB_NAME,
+                                    charset='utf8')
+        log.info('Connected to the database.')
 
     def execute_query(self, query):
-        try:
-            cursor = self.conn.cursor()
-            log.info('Executing query...')
-            cursor.execute(query)
-            log.info('Success')
-        except(AttributeError, MySQLdb.OperationalError):
-            if os.path.exists('prod.txt'):
-                self.connect()
-            else:
-                if self.tunnel_opened:
-                    self.connect_through_ssh()
-                else:
-                    self.open_ssh_tunnel()
-                    self.connect_through_ssh()
+        """
+        Executes a given query
+        :param query: query to execute
+        :return: cursor object
+        """
+        if not self.conn:
+            self.connect()
 
-            cursor = self.conn.cursor()
-            log.info('Executing query...')
-            cursor.execute(query)
-            log.info('Success')
+        cursor = self.conn.cursor()
+        log.debug('Executing query...')
+        cursor.execute(query)
+        log.debug('The query executed successfully')
         return cursor
 
     def disconnect(self):
-        self.conn.close()
+        """
+        Closes the connection to the database and ssh tunnel if needed
+        :return: True if succeeded
+        """
+        if self.conn:
+            self.conn.close()
+            log.info('Connection to the database has been closed.')
         if self.tunnel:
             self.tunnel.stop()
+            log.info('SSH tunnel has been closed.')
         self.tunnel_opened = False
         return True
