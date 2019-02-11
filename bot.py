@@ -146,20 +146,25 @@ def clean_old_user_languages_from_memory(max_users):
         deleted_entry = user_lang.pop(entry, None)
         if deleted_entry:
             num_deleted_entries += 1
-    log.debug('{} entries with users language preferences were removed from RAM.'.format(num_deleted_entries))
+    log.debug('{} entries with users language '
+              'preferences were removed from RAM.'.format(num_deleted_entries))
     return True
 
 
 def set_user_language(chat_id, lang):
     # Function to set language for a user
 
-    log.debug('Updating info about user {} language in memory & database...'.format(chat_id))
-    query = 'UPDATE user_lang_table SET lang="{}" WHERE chat_id={}'.format(lang, chat_id)
+    log.debug('Updating info about user {} '
+              'language in memory & database...'.format(chat_id))
+    query = ('UPDATE user_lang_table '
+             'SET lang="{}" '
+             'WHERE chat_id={}'.format(lang, chat_id))
     db.execute_query(query)
     db.conn.commit()
     user_lang[chat_id] = lang
 
-    # Actually we can set length to be much more, but now I don't have a lot of users, but need to keep an eye whether
+    # Actually we can set length to be much more,
+    # but now I don't have a lot of users, but need to keep an eye whether
     # this function works well or not
     if len(user_lang) > 10:
         clean_old_user_languages_from_memory(2)
@@ -169,7 +174,8 @@ def set_user_language(chat_id, lang):
 
 def get_user_lang(chat_id):
     """
-    Function to look up user language in dictionary (which is like cache), then in database (if it is not in dict).
+    Function to look up user language in dictionary
+    (which is like cache), then in database (if it is not in dict).
     If there is not language preference for that user, set en-US by default.
 
     :param chat_id: user_id
@@ -178,7 +184,9 @@ def get_user_lang(chat_id):
     log.info('Defining user {} language...'.format(chat_id))
     lang = user_lang.get(chat_id, None)
     if not lang:
-        query = 'SELECT lang FROM user_lang_table WHERE chat_id={}'.format(chat_id)
+        query = ('SELECT lang '
+                 'FROM user_lang_table '
+                 'WHERE chat_id={}'.format(chat_id))
         try:
             cursor = db.execute_query(query)
         except (MySQLdb.Error, MySQLdb.Warning) as err:
@@ -193,8 +201,10 @@ def get_user_lang(chat_id):
         else:
             lang = 'en-US'
             bot.send_message(config.MY_TELEGRAM, text='You have a new user!')
-            log.info('User {} default language for bot is set to be en-US.'.format(chat_id))
-            query = 'INSERT INTO user_lang_table (chat_id, lang) VALUES ({}, "{}")'.format(chat_id, lang)
+            log.info('User {} default language for bot is '
+                     'set to be en-US.'.format(chat_id))
+            query = ('INSERT INTO user_lang_table (chat_id, lang) '
+                     'VALUES ({}, "{}")'.format(chat_id, lang))
             db.execute_query(query)
             db.conn.commit()
             user_lang[chat_id] = lang
@@ -208,11 +218,12 @@ def get_user_lang(chat_id):
 def change_user_language(chat_id, curr_lang):
     # Switch language from Russian to English or conversely
     new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
-    log.info('Changing user {} language from {} to {}...'.format(chat_id, curr_lang, new_lang))
+    log.info('Changing user {} language from '
+             '{} to {}...'.format(chat_id, curr_lang, new_lang))
     try:
         set_user_language(chat_id, new_lang)
         return new_lang
-    except:  # who knows what god can send us
+    except Exception:  # who knows what god can send us
         log.error(traceback.format_exc())
         bot.send_message(config.MY_TELEGRAM, text=traceback.format_exc())
         return False
@@ -272,7 +283,7 @@ def get_admin_stat(command):
                  'FROM photo_queries_table '
                  'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
-        answer += '{} times users sent photos today.'.format(cursor.fetchone()[0])
+        answer += f'{cursor.fetchone()[0]} times users sent photos today.'
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}" '
@@ -283,8 +294,10 @@ def get_admin_stat(command):
         return answer
 
     elif command == 'number of users':
-        # Show number of users who has used bot at least once or more (first for the whole time, then today)
-        log.info('Evaluating number of users that use bot since the first day and today...')
+        # Show number of users who has used bot at least
+        # once or more (first for the whole time, then today)
+        log.info('Evaluating number of users that use bot '
+                 'since the first day and today...')
         query = ('SELECT COUNT(DISTINCT chat_id) '
                  'FROM photo_queries_table')
         cursor = db.execute_query(query)
@@ -293,7 +306,7 @@ def get_admin_stat(command):
                  'FROM photo_queries_table '
                  'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
-        answer += '\n{} users have sent photos today.'.format(cursor.fetchone()[0])
+        answer += f'\n{cursor.fetchone()[0]} users have sent photos today.'
         log.info('Done.')
         return answer
 
@@ -303,22 +316,26 @@ def get_admin_stat(command):
         query = ('SELECT COUNT(DISTINCT camera_name) '
                  'FROM photo_queries_table')
         cursor = db.execute_query(query)
-        answer += 'There are totally {} cameras/smartphones.'.format(cursor.fetchone()[0])
+        answer += (f'There are totally {cursor.fetchone()[0]} '
+                   f'cameras/smartphones.')
         query = ('SELECT COUNT(DISTINCT camera_name) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
-        answer += '\n{} cameras/smartphones were used today.'.format(cursor.fetchone()[0])
+        answer += f'\n{cursor.fetchone()[0]} cameras/smartphones ' \
+                  'were used today.'
         log.info('Done.')
         return answer
 
     elif command == 'uptime':
         fmt = 'Uptime: {} days, {} hours, {} minutes and {} seconds.'
         td = datetime.now() - start_time
-        # datetime.timedelta.seconds returns you total number of seconds since given time, so you need to perform
+        # datetime.timedelta.seconds returns you total number of seconds
+        # since given time, so you need to perform
         # a little bit of math to make whole hours, minutes and seconds from it
         # And there isn't any normal way to do it in Python unfortunately
-        uptime = fmt.format(td.days, td.seconds // 3600, td.seconds % 3600 // 60, td.seconds % 60)
+        uptime = fmt.format(td.days, td.seconds // 3600, td.seconds % 3600 //
+                            60, td.seconds % 60)
         log.info(uptime)
         return uptime
 
@@ -340,15 +357,18 @@ def turn_bot_off():
 def create_main_keyboard(message):
     chat_id = message.chat.id
     current_user_lang = get_user_lang(chat_id)
-    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,
+                                       resize_keyboard=True)
     markup.row('Русский/English')
     markup.row(messages[current_user_lang]['top_cams'])
     markup.row(messages[current_user_lang]['top_lens'])
     markup.row(messages[current_user_lang]['top_countries'])
-    bot.send_message(chat_id, messages[current_user_lang]['menu_header'], reply_markup=markup)
+    bot.send_message(chat_id, messages[current_user_lang]['menu_header'],
+                     reply_markup=markup)
 
 
-@bot.message_handler(content_types=['text'])  # Decorator to handle text messages
+# Decorator to handle text messages
+@bot.message_handler(content_types=['text'])
 def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
     chat_id = message.chat.id
@@ -358,49 +378,68 @@ def handle_menu_response(message):
 
         current_user_lang = change_user_language(chat_id, current_user_lang)
         if current_user_lang:
-            bot.send_message(chat_id, messages[current_user_lang]['switch_lang_success'])
+            bot.send_message(chat_id, messages[current_user_lang]
+                                              ['switch_lang_success'])
             create_main_keyboard(message)
         else:
-            bot.send_message(chat_id, messages[get_user_lang(chat_id)]['switch_lang_failure'])
+            bot.send_message(chat_id, messages[get_user_lang(chat_id)]
+                                              ['switch_lang_failure'])
             create_main_keyboard(message)
 
     elif message.text == messages[current_user_lang]['top_cams']:
         log.info('User {} asked for top cams'.format(chat_id))
-        bot.send_message(chat_id, text=get_most_popular_items('camera_name', chat_id))
-        log.info('List of most popular cameras has been returned to {} '.format(chat_id))
+        bot.send_message(chat_id,
+                         text=get_most_popular_items('camera_name', chat_id))
+        log.info('List of most popular cameras '
+                 'has been returned to %d', chat_id)
 
     elif message.text == messages[current_user_lang]['top_lens']:
         log.info('User {} asked for top lens'.format(chat_id))
-        bot.send_message(chat_id, text=get_most_popular_items('lens_name', chat_id))
-        log.info('List of most popular lens has been returned to {} '.format(chat_id))
+        bot.send_message(chat_id,
+                         text=get_most_popular_items('lens_name', chat_id))
+        log.info('List of most popular lens has been returned to %d', chat_id)
 
     elif message.text == messages[current_user_lang]['top_countries']:
         log.info('User {} asked for top countries'.format(chat_id))
-        lang_table_name = 'country_ru' if current_user_lang == 'ru-RU' else 'country_en'
-        bot.send_message(chat_id, text=get_most_popular_items(lang_table_name, chat_id))
-        log.info('List of most popular countries has been returned to {} '.format(chat_id))
+        lang_table_name = ('country_ru'
+                           if current_user_lang == 'ru-RU'
+                           else 'country_en')
+        bot.send_message(chat_id,
+                         text=get_most_popular_items(lang_table_name, chat_id))
+        log.info('List of most popular countries has '
+                 'been returned to %d', chat_id)
 
     elif message.text.lower() == 'admin' and chat_id == config.MY_TELEGRAM:
         # It creates inline keyboard with options for admin
-        # Function that handle user interaction with the keyboard called admin_menu
+        # Function that handle user interaction
+        # with the keyboard called admin_menu
         keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
-        keyboard.add(types.InlineKeyboardButton(text='Turn bot off', callback_data='off'))
-        keyboard.add(types.InlineKeyboardButton(text='Last active users', callback_data='last active'))
-        keyboard.add(types.InlineKeyboardButton(text='Total number of photos were sent',
-                                                callback_data='total number photos sent'))
-        keyboard.add(types.InlineKeyboardButton(text='Number of photos today', callback_data='photos today'))
-        keyboard.add(types.InlineKeyboardButton(text='Number of users', callback_data='number of users'))
-        keyboard.add(types.InlineKeyboardButton(text='Number of gadgets', callback_data='number of gadgets'))
-        keyboard.add(types.InlineKeyboardButton(text='Uptime', callback_data='uptime'))
+        keyboard.add(types.InlineKeyboardButton(text='Turn bot off',
+                                                callback_data='off'))
+        keyboard.add(types.InlineKeyboardButton(text='Last active users',
+                                                callback_data='last active'))
+        keyboard.add(types.InlineKeyboardButton(text='Total number of photos '
+                                                     'were sent',
+                                                callback_data='total number '
+                                                              'photos sent'))
+        keyboard.add(types.InlineKeyboardButton(text='Number of photos today',
+                                                callback_data='photos today'))
+        keyboard.add(types.InlineKeyboardButton(text='Number of users',
+                                                callback_data='number of '
+                                                              'users'))
+        keyboard.add(types.InlineKeyboardButton(text='Number of gadgets',
+                                                callback_data='number '
+                                                              'of gadgets'))
+        keyboard.add(types.InlineKeyboardButton(text='Uptime',
+                                                callback_data='uptime'))
         bot.send_message(config.MY_TELEGRAM,
                          'Admin commands', reply_markup=keyboard)
 
     else:
         msg = message.from_user
-        log.info('Name: {} Last name: {} Nickname: {} ID: {} sent text message.'.format(msg.first_name,
-                                                                                        msg.last_name,
-                                                                                        msg.username,
-                                                                                        msg.id))
+        log.info('Name: %s Last name: %s Nickname: %s ID: %d sent text '
+                 'message.', msg.first_name, msg.last_name,
+                 msg.username, msg.id)
 
         # Answer to user that bot can't make a conversation with him
         bot.send_message(chat_id, messages[current_user_lang]['dont_speak'])
@@ -408,7 +447,8 @@ def handle_menu_response(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def admin_menu(call):  # Respond commands from admin menu
-    bot.answer_callback_query(callback_query_id=call.id, show_alert=False)  # Remove progress bar from pressed button
+    # Remove progress bar from pressed button
+    bot.answer_callback_query(callback_query_id=call.id, show_alert=False)
 
     if call.data == 'off':
         turn_bot_off()
@@ -434,10 +474,12 @@ def admin_menu(call):  # Respond commands from admin menu
 
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
-    bot.send_message(message.chat.id, messages[get_user_lang(message.chat.id)]['as_file'])
+    bot.send_message(message.chat.id,
+                     messages[get_user_lang(message.chat.id)]['as_file'])
     msg = message.from_user
-    log_message = ('Name: {} Last name: {} Nickname: {} ID: {} sent '
-                   'photo as a photo.'.format(msg.first_name, msg.last_name, msg.username, msg.id))
+    log_message = ('Name: %s Last name: %s Nickname: %s ID: %d sent '
+                   'photo as a photo.', msg.first_name, msg.last_name,
+                   msg.username, msg.id)
     log.info(log_message)
 
 
@@ -451,9 +493,11 @@ def dedupe_string(string):
 
 
 def cache_number_users_with_same_feature(func):
-    # Closure to cache previous results of given function so to not call database to much
+    # Closure to cache previous results of given
+    # function so to not call database to much
     # It saves result in a dictionary because result depends on a user.
-    # cache_time - time in minutes when will be returned cached result instead of calling database
+    # cache_time - time in minutes when will
+    # be returned cached result instead of calling database
 
     when_was_called = None
     result = {}
@@ -464,12 +508,16 @@ def cache_number_users_with_same_feature(func):
         nonlocal when_was_called
         cache_time = 5
 
-        # Make id in order to cache and return result by feature_type and language of user
+        # Make id in order to cache and return
+        # result by feature_type and language of user
         result_id = '{}_{}'.format(feature_name, get_user_lang(chat_id))
 
-        # It's high time to reevaluate result instead of just looking up in cache if countdown went off, if
-        # function has not been called yet, if result for feature (like camera, lens or country) not in cache
-        high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
+        # It's high time to reevaluate result instead
+        # of just looking up in cache if countdown went off, if
+        # function has not been called yet, if result for
+        # feature (like camera, lens or country) not in cache
+        high_time = (when_was_called + timedelta(minutes=cache_time) <
+                     datetime.now() if when_was_called else True)
 
         if not when_was_called or high_time or result_id not in result:
             when_was_called = datetime.now()
@@ -477,8 +525,10 @@ def cache_number_users_with_same_feature(func):
             return result[result_id]
         else:
             log.info('Returning cached result of ' + func.__name__)
-            time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
-            log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
+            time_left = (when_was_called + timedelta(minutes=cache_time) -
+                         datetime.now())
+            log.debug('Time to reevaluate result of %d is %f', func.__name__,
+                      time_left)
             return result[result_id]
 
     return func_launcher
@@ -486,16 +536,23 @@ def cache_number_users_with_same_feature(func):
 
 def cache_most_popular_items(func):
     """
-    Function that prevent calling any given function more often that once in a cache_time.
-    It calls given function, then during next cache_time  it will return cached result of a given function.
-    Function call given function when: it hasn't been called before; cache_time is passed, user ask result in
-    another language.
+    Function that prevent calling any given function more often that once in
+    a cache_time. It calls given function, then during next cache
+    return func_launcher_time it
+    will return cached result of a given function. Function call given
+    function when: it hasn't been called before; cache_time is passed,
+    user ask result in another language.
 
-    :param func: some expensive function that we don't want to call too often because it can slow down the script
-    :return: wrapper that figure out when to call function and when to return cached result
+    :param func: some expensive function that we don't want to call too often
+    because it can slow down the script
+    :return: wrapper that figure out when to call function and when to
+    return cached result
     """
-    when_was_called = None  # store time when given function was called last time
-    result = {}  # dictionary to store result where language of user is key and message for user is a value
+    # store time when given function was called last time
+    when_was_called = None
+    # dictionary to store result where language of user
+    # is key and message for user is a value
+    result = {}
 
     def function_launcher(item_type, chat_id):
         nonlocal func
@@ -510,17 +567,21 @@ def cache_most_popular_items(func):
         else:
             result_id = item_type
 
-        # evaluate boolean whether it is high time to call given function or not
-        high_time = when_was_called + timedelta(minutes=cache_time) < datetime.now() if when_was_called else True
+        # evaluate boolean whether it is high time to call given function or
+        # not
+        high_time = (when_was_called + timedelta(minutes=cache_time) <
+                     datetime.now() if when_was_called else True)
 
         if not result.get(result_id, None) or not when_was_called or high_time:
             when_was_called = datetime.now()
             result[result_id] = func(item_type, chat_id)
             return result[result_id]
         else:
-            log.debug('Return cached result of {}...'.format(func.__name__))
-            time_left = when_was_called + timedelta(minutes=cache_time) - datetime.now()
-            log.debug('Time to reevaluate result of {} is {}'.format(func.__name__, time_left))
+            log.debug('Return cached result of %s...', func.__name__)
+            time_left = (when_was_called + timedelta(minutes=cache_time) -
+                         datetime.now())
+            log.debug('Time to reevaluate result of %s is %f',
+                      func.__name__, time_left)
             return result[result_id]
 
     return function_launcher
@@ -533,7 +594,8 @@ def get_address(latitude, longitude, lang):
     :param latitude:
     :param longitude:
     :param lang: preferred user language
-    :return: address as a string where photo was taken; name of country in English and Russian to keep statistics
+    :return: address as a string where photo was taken; name of
+    country in English and Russian to keep statistics
     of the most popular countries among users of the bot
     """
 
@@ -558,7 +620,7 @@ def get_address(latitude, longitude, lang):
             location2_raw = location2.raw
             country_en = location2_raw['address']['country']
         return location.address, (country_en, country_ru)
-    except:  # You never know what god can bring to us
+    except Exception:
         log.error('Getting address failed!')
         log.error(traceback.format_exc())
         return False
@@ -566,21 +628,24 @@ def get_address(latitude, longitude, lang):
 
 def get_coordinates_from_exif(data, chat_id):
     """
-    # Convert GPS coordinates from format in which they are stored in EXIF of photo
-     to format that accepts Telegram (and Google Maps for example)
+    # Convert GPS coordinates from format in which they are stored in
+    EXIF of photo to format that accepts Telegram (and Google Maps for example)
 
     :param data: EXIF data extracted from photo
     :param chat_id: user id
-    :return: either floats that represents longitude and latitude or string with error message dedicated to user
+    :return: either floats that represents longitude and latitude or
+    string with error message dedicated to user
     """
 
     current_user_lang = get_user_lang(chat_id)
 
     def idf_tag_to_coordinate(tag):
-        # Convert ifdtag from exifread module to decimal degree format of coordinate
+        # Convert ifdtag from exifread module to decimal degree format
+        # of coordinate
         tag = str(tag).replace('[', '').replace(']', '').split(',')
         if '/' in tag[2]:
-            # Split string like '4444/5555' and divide first integer by second one
+            # Split string like '4444/5555' and divide first integer
+            # by second one
             tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
         elif '/' not in tag[2]:
             # Rare case so far - when there is just a number, not ratio
@@ -601,15 +666,21 @@ def get_coordinates_from_exif(data, chat_id):
         return messages[current_user_lang]['no_gps']
 
     # Return positive or negative longitude/latitude from exifread's ifdtag
-    lat = -(idf_tag_to_coordinate(raw_lat)) if lat_ref == 'S' else idf_tag_to_coordinate(raw_lat)
-    lon = -(idf_tag_to_coordinate(raw_lon)) if lon_ref == 'W' else idf_tag_to_coordinate(raw_lon)
+    lat = (-(idf_tag_to_coordinate(raw_lat))
+           if lat_ref == 'S' else idf_tag_to_coordinate(raw_lat))
+    lon = (-(idf_tag_to_coordinate(raw_lon))
+           if lon_ref == 'W' else idf_tag_to_coordinate(raw_lon))
 
     if lat is False or lon is False:
         log.error('Cannot read coordinates of this photo.')
-        raw_coordinates = ('Latitude reference: {}\n.Raw latitude: {}\n.Longitude reference: {}\n.'
-                           'Raw longitude: {}.'.format(lat_ref, raw_lat, lon_ref, raw_lon))
+        raw_coordinates = (f'Latitude reference: {lat_ref} '
+                           f'Raw latitude: {raw_lat}. '
+                           f'Longitude reference: {lon_ref}. '
+                           f'Raw longitude: {raw_lon}.')
         log.info(raw_coordinates)
-        bot.send_message(config.MY_TELEGRAM, text=('Cannot read these coordinates: ' + raw_coordinates))
+        bot.send_message(config.MY_TELEGRAM,
+                         text=('Cannot read these coordinates: ' +
+                               raw_coordinates))
         return messages[current_user_lang]['bad_gps']
     elif lat < 1 and lon < 1:
         log.info('There are zero GPS coordinates in this photo.')
@@ -620,13 +691,14 @@ def get_coordinates_from_exif(data, chat_id):
 
 def check_camera_tags(tags):
     """
-    Function that convert stupid code name of a smartphone or camera from EXIF to meaningful one by looking a
-    collation in a special MySQL table
+    Function that convert stupid code name of a smartphone or camera
+    from EXIF to meaningful one by looking a collation in a special MySQL table
     For example instead of just Nikon there can be NIKON CORPORATION in EXIF
 
     :param tags: name of a camera and lens from EXIF
-    :return: list with one or two strings which are name of camera and/or lens. If there is not better name
-    for the gadget in database, function just returns name how it is
+    :return: list with one or two strings which are name of
+    camera and/or lens. If there is not better name for the gadget
+    in database, function just returns name how it is
     """
     checked_tags = []
 
@@ -635,11 +707,14 @@ def check_camera_tags(tags):
             tag = str(tag).strip()
             log.info('Looking up collation for {}'.format(tag))
             try:
-                query = 'SELECT right_tag FROM tag_table WHERE wrong_tag="{}"'.format(tag)
+                query = ('SELECT right_tag '
+                         'FROM tag_table '
+                         'WHERE wrong_tag="{}"'.format(tag))
                 cursor = db.execute_query(query)
                 if cursor.rowcount:
-                    tag = cursor.fetchone()[0]  # Get appropriate tag from the table
-                    log.info('Tag after looking up in tag_tables - {}.'.format(tag))
+                    # Get appropriate tag from the table
+                    tag = cursor.fetchone()[0]
+                    log.info('Tag after looking up in tag_tables - %s.', tag)
             except (MySQLdb.Error, MySQLdb.Warning) as err:
                 log.error(err)
 
@@ -650,15 +725,19 @@ def check_camera_tags(tags):
 @cache_most_popular_items
 def get_most_popular_items(item_type, chat_id):
     """
-    Get most common cameras/lenses/countries from database and make list of them
-    :param item_type: string with column name to choose between cameras, lenses and countries
+    Get most common cameras/lenses/countries from database and
+    make list of them
+    :param item_type: string with column name to choose between cameras,
+    lenses and countries
     :param chat_id: id of user derived from telegram object message
-    :return: string which is either list of most common cameras/lenses/countries or message which states that list is
+    :return: string which is either list of most common
+    cameras/lenses/countries or message which states that list is
     empty
     """
 
     def list_to_ordered_str_list(list_of_gadgets):
-        # Make Python list to be string like roster with indexes and new line characters like:
+        # Make Python list to be string like roster with indexes and
+        # new line characters like:
         # 1. Canon 80D
         # 2. iPhone 4S
 
@@ -672,10 +751,9 @@ def get_most_popular_items(item_type, chat_id):
         return string_roaster
 
     log.debug('Evaluating most popular things...')
-    # arguments passed into timedelta is number of days
-    month_ago = datetime.strftime(datetime.now() - timedelta(120), '%Y-%m-%d %H:%M:%S')
 
-    # This query returns item types in order where the first one item has the highest number of occurrences
+    # This query returns item types in order where the first one item
+    # has the highest number of occurrences
     # in a given column
     query = ('SELECT {0} FROM photo_queries_table '
              'GROUP BY {0} '
@@ -701,15 +779,19 @@ def get_most_popular_items(item_type, chat_id):
 @cache_number_users_with_same_feature
 def get_number_users_by_feature(feature_name, feature_type, chat_id):
     """
-    Get number of users that have same smartphone, camera, lens or that have been to the same country
-    :param feature_name: string which is name of a particular feature e.g. camera name or country name
+    Get number of users that have same smartphone, camera, lens or that
+    have been to the same country
+    :param feature_name: string which is name of a particular feature e.g.
+    camera name or country name
     :param feature_type: string which is name of the column in database
     :param chat_id: integer which is ID of user
     :return: string which is message to user
     """
-    log.debug('Check how many users also have feature: {}...'.format(feature_name))
+    log.debug('Check how many users also have feature: %s...', feature_name)
     answer = ''
-    query = 'SELECT DISTINCT chat_id FROM photo_queries_table WHERE {}="{}"'.format(feature_type, feature_name)
+    query = ('SELECT DISTINCT chat_id '
+             'FROM photo_queries_table '
+             'WHERE {}="{}"'.format(feature_type, feature_name))
     cursor = db.execute_query(query)
 
     row = cursor.rowcount
@@ -717,36 +799,43 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
         return None
     if feature_type == 'camera_name':
         # asterisks for markdown - to make font bold
-        log.debug('row: ' + str(row))
-        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['camera_users'], str(row-1))
+        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
+                                   ['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
-        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['lens_users'], str(row - 1))
+        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
+                                   ['lens_users'], str(row - 1))
     elif feature_type == 'country_en':
-        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]['photos_from_country'], str(row - 1))
+        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
+                                   ['photos_from_country'], str(row - 1))
 
     return answer
 
 
 def save_user_query_info(data, message, country=None):
     """
-    When user send photo as a file to get information, bot also stores information about this query in
-    database to keep statistics that can be shown to user in different ways. It stores time of query, telegram id
-    of a user, his camera and lens which were used for taking photo, his first and last name, nickname and country
-    where photo was taken
+    When user send photo as a file to get information, bot also stores
+    information about this query in database to keep statistics that can be
+    shown to user in different ways. It stores time of query, telegram id
+    of a user, his camera and lens which were used for taking photo, his
+    first and last name, nickname and country where photo was taken
 
     :param data: list with name of camera and lens (if any)
-    :param message: Telegram object "message" that contains info about user and such
-    :param country: country where photo was taken
+    :param message: Telegram object "message" that contains info about user
+    and such :param country: country where photo was taken
     :return: None
     """
     camera_name, lens_name = data
-    camera_name = 'NULL' if not camera_name else '{0}{1}{0}'.format('"', camera_name)
+    camera_name = ('NULL' if not camera_name
+                   else '{0}{1}{0}'.format('"', camera_name))
     lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
     chat_id = message.chat.id
     msg = message.from_user
-    first_name = 'NULL' if not msg.first_name else '{0}{1}{0}'.format('"', msg.first_name)
-    last_name = 'NULL' if not msg.last_name else '{0}{1}{0}'.format('"', msg.last_name)
-    username = 'NULL' if not msg.username else '{0}{1}{0}'.format('"', msg.username)
+    first_name = ('NULL' if not msg.first_name
+                  else '{0}{1}{0}'.format('"', msg.first_name))
+    last_name = ('NULL' if not msg.last_name
+                 else '{0}{1}{0}'.format('"', msg.last_name))
+    username = ('NULL' if not msg.username
+                else '{0}{1}{0}'.format('"', msg.username))
     if not country:
         country_en = country_ru = 'NULL'
     else:
@@ -757,9 +846,11 @@ def save_user_query_info(data, message, country=None):
         log.info('Adding user query to photo_queries_table...')
 
         query = ('INSERT INTO photo_queries_table '
-                 '(chat_id, camera_name, lens_name, first_name, last_name, username, country_en, country_ru) '
+                 '(chat_id, camera_name, lens_name, first_name, last_name, '
+                 'username, country_en, country_ru) '
                  'VALUES ({}, {}, {}, {}, {}, {}, '
-                 '{}, {})'.format(chat_id, camera_name, lens_name, first_name, last_name, username, country_en,
+                 '{}, {})'.format(chat_id, camera_name, lens_name, first_name,
+                                  last_name, username, country_en,
                                   country_ru))
 
         db.execute_query(query)
@@ -773,18 +864,23 @@ def save_user_query_info(data, message, country=None):
 
 def read_exif(image, message):
     """
-    Get various info about photo that user sent: time when picture was taken, location as longitude and latitude,
-    post address, type of camera/smartphone and lens, how many people have the same camera/lens.
+    Get various info about photo that user sent: time when picture was taken,
+    location as longitude and latitude, post address, type of
+    camera/smartphone and lens, how many people have
+    the same camera/lens.
 
     :param image: actual photo that user sent to bot
     :param message: object from Telegram that contains user id, name etc
-    :return: list with three values. First value called answer is also list that contains different information
-    about picture. First value of answer is either tuple with coordinates from photo or string message
-    that photo doesn't contain coordinates. Second value of answer is string with photo details: time, camera, lens
-    from exif and, if any, messages how many other bot users have the same camera/lens.
-    Second value in list that this function returns is camera info, which is list with one or two items: first is
-    name of the samera/smartphone, second, if exists, name of the lens.
-    Third  value in list that this function returns is a country where picture was taken.
+    :return: list with three values. First value called answer is also list
+    that contains different information about picture. First value of answer
+    is either tuple with coordinates from photo or string message
+    that photo doesn't contain coordinates. Second value of answer is string
+    with photo details: time, camera, lens from exif and, if any, messages
+    how many other bot users have the same camera/lens.
+    Second value in list that this function returns is camera info, which is
+    list with one or two items: first is name of the samera/smartphone,
+    second, if exists, name of the lens. Third  value in list that this
+    function returns is a country where picture was taken.
 
     """
     chat_id = message.chat.id
@@ -801,20 +897,25 @@ def read_exif(image, message):
     lens_brand = str(exif.get('EXIF LensMake', ''))
     lens_model = str(exif.get('EXIF LensModel', ''))
 
-    if not any([date_time, camera_brand, camera_model, lens_brand, lens_model]):
-        return False  # Means that there is actually no any data of our interest
+    if not any([date_time, camera_brand, camera_model, lens_brand,
+                lens_model]):
+        # Means that there is actually no any data of our interest
+        return False
 
     date_time_str = str(date_time) if date_time is not None else None
     # Merge brand and model together and get rid of repetitive words
-    camera = dedupe_string(camera_brand + ' ' + camera_model) if camera_brand + ' ' + camera_model != ' ' else None
-    lens = dedupe_string(lens_brand + ' ' + lens_model) if lens_brand + ' ' + lens_model != ' ' else None
+    camera_string = f'{camera_brand} {camera_model}'
+    camera = dedupe_string(camera_string) if camera_string != ' ' else None
+    lens_string = f'{lens_brand} {lens_model}'
+    lens = dedupe_string(lens_string) if lens_string != ' ' else None
 
     # Check if there is more appropriate name for camera/lens
     camera, lens = check_camera_tags([camera, lens])
     camera_info = camera, lens
 
     exif_converter_result = get_coordinates_from_exif(exif, chat_id)
-    # If tuple - there are coordinates, else - message to user that there are no coordinates
+    # If tuple - there are coordinates, else - message to user t
+    # hat there are no coordinates
     if isinstance(exif_converter_result, tuple):
         coordinates = exif_converter_result
         answer.append(coordinates)
@@ -825,7 +926,8 @@ def read_exif(image, message):
         except TypeError:
             address, country = '', None
     else:
-        # Add user message that photo doesn't have info about location or it can't be read
+        # Add user message that photo doesn't have info about location or
+        # it can't be read
         address, country = '', None
         user_msg = exif_converter_result
         answer.append(user_msg)
@@ -835,20 +937,29 @@ def read_exif(image, message):
     else:
         save_user_query_info(camera_info, message)
 
-    others_with_this_cam = get_number_users_by_feature(camera, 'camera_name', chat_id)
-    others_with_this_lens = get_number_users_by_feature(lens, 'lens_name', chat_id) if lens else None
-    others_from_this_country = (get_number_users_by_feature(country[0], 'country_en', chat_id)
-                                if country else None)
+    others_with_this_cam = get_number_users_by_feature(camera,
+                                                       'camera_name', chat_id)
+
+    others_with_this_lens = (
+        get_number_users_by_feature(lens, 'lens_name', chat_id)
+        if lens else None)
+
+    others_from_this_country = (
+        get_number_users_by_feature(country[0], 'country_en', chat_id)
+        if country else None)
 
     # Make user message about camera from exif
     info_about_shot = ''
-    for tag, item in zip(messages[get_user_lang(chat_id)]['camera_info'], [date_time_str, camera, lens, address]):
+    for tag, item in zip(messages[get_user_lang(chat_id)]['camera_info'],
+                         [date_time_str, camera, lens, address]):
         if item:
             info_about_shot += '*{}*: {}\n'.format(tag, item)
 
     info_about_shot += others_with_this_cam if others_with_this_cam else ''
-    info_about_shot += '\n' + others_with_this_lens if others_with_this_lens else ''
-    info_about_shot += '\n' + others_from_this_country if others_from_this_country else ''
+    info_about_shot += ('\n' + others_with_this_lens
+                        if others_with_this_lens else '')
+    info_about_shot += ('\n' + others_from_this_country
+                        if others_from_this_country else '')
     answer.append(info_about_shot)
 
     return [answer, camera_info, country]
@@ -860,12 +971,8 @@ def handle_image(message):
     current_user_lang = get_user_lang(chat_id)
     bot.reply_to(message, messages[current_user_lang]['photo_prcs'])
     msg = message.from_user
-    log_msg = ('Name: {} Last name: {} Nickname: {} ID: {} sent photo as a file.'.format(msg.first_name,
-                                                                                         msg.last_name,
-                                                                                         msg.username,
-                                                                                         msg.id))
-
-    log.info(log_msg)
+    log.info('Name: %s Last name: %s Nickname: %s ID: %d sent photo as a '
+             'file.', msg.first_name, msg.last_name, msg.username, msg.id)
 
     file_id = bot.get_file(message.document.file_id)
     # Get temporary link to a photo that user has sent to bot
@@ -900,24 +1007,18 @@ def handle_image(message):
         bot.send_location(chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[1], parse_mode='Markdown')
 
-        log_msg = ('Sent location and EXIF data back to Name: {} Last name: {} Nickname: '
-                   '{} ID: {}'.format(msg.first_name,
-                                      msg.last_name,
-                                      msg.username,
-                                      msg.id))
-
-        log.info(log_msg)
+        log.info('Sent location and EXIF data back to Name: %s Last name: %s '
+                 'Nickname: %s ID: %d', msg.first_name, msg.last_name,
+                 msg.username, msg.id)
         return
 
-    # Sent to user only info about camera because there is no gps coordinates in his photo
+    # Sent to user only info about camera because there is no gps
+    # coordinates in his photo
     user_msg = '{}\n{}'.format(answer[0], answer[1])
     bot.reply_to(message, user_msg, parse_mode='Markdown')
-    log_msg = ('Sent only EXIF data back to Name: {} Last name: {} Nickname: '
-               '{} ID: {}'.format(msg.first_name,
-                                  msg.last_name,
-                                  msg.username,
-                                  msg.id))
-    log.info(log_msg)
+    log.info('Sent only EXIF data back to Name: %s Last name: %s '
+             'Nickname: %s ID: %d', msg.first_name, msg.last_name,
+             msg.username, msg.id)
 
 
 # I think you can safely cache several hundred or thousand of
