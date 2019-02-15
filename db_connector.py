@@ -1,12 +1,15 @@
-# Module that provides a way to connect ot MySQL and reconnect each time
-# connection is lost. It also can
-# automatically set up SSH tunnel thanks to sshtunnel module
+"""
+Module that provides a way to connect to MySQL and reconnect each time
+connection is lost. It also can automatically set up SSH tunnel thanks to
+sshtunnel module
 
-# Original way to do it was described at
-# https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
+Original way to do it was described at
+https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
+"""
 
 import os
 
+# goes as mysqlclient in requirements
 import MySQLdb
 import sshtunnel
 
@@ -23,14 +26,14 @@ class DB:
     tunnel = None
     tunnel_opened = False
 
-    def open_ssh_tunnel(self):
+    def _open_ssh_tunnel(self):
         """
         Method that opens ssh tunnel to the server where the database of
         photoGPSbot is located
         :return: None
         """
         log.debug('Establishing SSH tunnel to the server where the database '
-                 'is located...')
+                  'is located...')
         sshtunnel.SSH_TIMEOUT = 5.0
         sshtunnel.TUNNEL_TIMEOUT = 5.0
         self.tunnel = sshtunnel.SSHTunnelForwarder(
@@ -44,7 +47,7 @@ class DB:
         self.tunnel_opened = True
         log.debug('SSH tunnel has been established.')
 
-    def connect(self):
+    def _connect(self):
         """
         Established connection either to local database or to remote one if
         the script runs not on the same server where database is located
@@ -56,9 +59,9 @@ class DB:
         else:
             log.info('Connecting to database via SSH...')
             if not self.tunnel_opened:
-                self.open_ssh_tunnel()
+                self._open_ssh_tunnel()
 
-            port=self.tunnel.local_bind_port
+            port = self.tunnel.local_bind_port
 
         self.conn = MySQLdb.connect(host='127.0.0.1',
                                     user=config.DB_USER,
@@ -72,16 +75,32 @@ class DB:
         """
         Executes a given query
         :param query: query to execute
-        :return: cursor object
+        :return: cursor object or None if it failes to execute a query
         """
         if not self.conn:
-            self.connect()
+            try:
+                self._connect()
+            except MySQLdb.Error as e:
+                log.error(e)
+                return
 
-        cursor = self.conn.cursor()
+        try:
+            cursor = self.conn.cursor()
+        # try to reconnect if MySQL server has gone away
+        except MySQLdb.Error as e:
+            log.warning(e)
+            log.info("Connecting to the MySQL again...")
+            self._connect()
+            cursor = self.conn.cursor()
+
         log.debug('Executing query...')
-        cursor.execute(query)
-        log.debug('The query executed successfully')
-        return cursor
+        try:
+            cursor.execute(query)
+            log.debug('The query executed successfully')
+            return cursor
+        except Exception as e:
+            log.error(f"Cannot execute query! Reason: {e}")
+            return
 
     def disconnect(self):
         """
