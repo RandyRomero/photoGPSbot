@@ -12,6 +12,7 @@ import os
 # goes as mysqlclient in requirements
 import MySQLdb
 import sshtunnel
+import socket
 
 import config
 from handle_logs import log
@@ -53,11 +54,11 @@ class DB:
         the script runs not on the same server where database is located
         :return: None
         """
-        if os.path.exists('prod.txt'):
+        if socket.gethostname() == config.PROD_HOST_NAME:
             log.info('Connecting to the local database...')
             port = 3306
         else:
-            log.info('Connecting to database via SSH...')
+            log.info('Connecting to the database via SSH...')
             if not self.tunnel_opened:
                 self._open_ssh_tunnel()
 
@@ -75,32 +76,25 @@ class DB:
         """
         Executes a given query
         :param query: query to execute
-        :return: cursor object or None if it failes to execute a query
+        :return: cursor object
         """
-        if not self.conn:
-            try:
-                self._connect()
-            except MySQLdb.Error as e:
-                log.error(e)
-                return
+        if not self.conn or not self.conn.open:
+            self._connect()
 
         try:
             cursor = self.conn.cursor()
         # try to reconnect if MySQL server has gone away
-        except MySQLdb.Error as e:
-            log.warning(e)
-            log.info("Connecting to the MySQL again...")
-            self._connect()
-            cursor = self.conn.cursor()
+        except MySQLdb.OperationalError as e:
+            if e[0] == 2006:
+                log.info(e)
+                log.info("Connecting to the MySQL again...")
+                self._connect()
+                self.execute_query(query)
 
         log.debug('Executing query...')
-        try:
-            cursor.execute(query)
-            log.debug('The query executed successfully')
-            return cursor
-        except Exception as e:
-            log.error(f"Cannot execute query! Reason: {e}")
-            return
+        cursor.execute(query)
+        log.debug('The query executed successfully')
+        return cursor
 
     def disconnect(self):
         """
