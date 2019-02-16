@@ -1,50 +1,64 @@
-# Small bot for Telegram that receive your photo and return you map where
-# it was taken.
-# Written by Aleksandr Mikheev.
-# https://github.com/RandyRomero/photoGPSbot
+"""
+Small bot for Telegram that receives your photo and returns you map where
+it was taken.
+Written by Aleksandr Mikheev.
+https://github.com/RandyRomero/photoGPSbot
+"""
 
-# todo refactor imports
-# todo get rid of globals
+# todo fix formatting in some log calls
 
 import os
 import sys
 import time
 import json
-import MySQLdb
+from io import BytesIO
+import traceback
+from datetime import datetime, timedelta
+import socket
+
+# goes as pyTelegramBotAPI in requirements
 import telebot
+# goes as mysqlclient in requirements
+import MySQLdb
 from telebot import types
 from telebot import apihelper
 import exifread
 import requests
-from io import BytesIO
-import traceback
-from datetime import datetime, timedelta
 from geopy.geocoders import Nominatim
+
 import config
 from handle_logs import log, clean_log_folder
 import db_connector
 
-
-clean_log_folder(20)
+clean_log_folder(3)
 
 # Load file with messages for user in two languages
 with open('language_pack.txt', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
 
 bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
-if not os.path.exists('prod.txt'):
+if not socket.gethostname() == config.PROD_HOST_NAME:
     log.info('Working through proxy.')
     apihelper.proxy = {'https': config.PROXY_CONFIG}
 
-# Connect to database
 db = db_connector.DB()
-if not db:
-    log.error('Can\'t connect to db.')
-    bot.send_message(config.MY_TELEGRAM,
-                     text='photoGPSbot can\'t connect to MySQL database!')
 
 # Dictionary that contains user_id -- preferred language for every active user
 user_lang = {}
+
+
+def execute_query(query):
+    """
+    Tries to execute query. If it is not successful, log about it and send
+    a messages directly to my own Telegram account
+    :param query: sql query to execute
+    :return: cursor object if successful, none if fails
+    """
+    try:
+        return db.execute_query(query)
+    except MySQLdb.Error:
+        log.error(traceback.format_exc())
+        bot.send_message(config.MY_TELEGRAM, text=traceback.format_exc())
 
 
 def load_last_user_languages(max_users):
@@ -66,23 +80,18 @@ def load_last_user_languages(max_users):
              "DESC LIMIT {};".format(max_users))
 
     log.info('Figure out last active users...')
-    try:
-        cursor = db.execute_query(query)
-    except (MySQLdb.Error, MySQLdb.Warning) as e:
-        log.error("Cannot get the data from the database! Reason: %s", e)
-        bot.send_message(config.MY_TELEGRAM, "Cannot get the data from the "
-                                    f"database! Reason: {e}")
-        db.disconnect()
+    cursor = execute_query(query)
+    if not cursor:
+        log.error("Can't figure out last active users! Check logs")
+        return
+    if not cursor.rowcount:
+        log.warning('There are no users in the db')
         return
 
-    if cursor.rowcount:
-        last_active_users_tuple_of_tuples = cursor.fetchall()
-        # Make list out of tuple of tuples that is returned by MySQL
-        last_active_users = [chat_id[0] for chat_id in
-                             last_active_users_tuple_of_tuples]
-    else:
-        log.warning('There are no last active users')
-        return
+    last_active_users_tuple_of_tuples = cursor.fetchall()
+    # Make list out of tuple of tuples that is returned by MySQL
+    last_active_users = [chat_id[0] for chat_id in
+                         last_active_users_tuple_of_tuples]
 
     log.debug('Caching language preferences for %d '
               'last active users from database...', max_users)
@@ -92,17 +101,20 @@ def load_last_user_languages(max_users):
              "FROM user_lang_table "
              "WHERE chat_id in {};".format(tuple(last_active_users)))
 
-    cursor = db.execute_query(query)
-    if cursor.rowcount:
-        languages_of_users = cursor.fetchall()
-        for line in languages_of_users:
-            log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
-            user_lang[line[0]] = line[1]
-        log.info('Users languages were cached.')
+    cursor = execute_query(query)
+    if not cursor:
+        log.error("Can't Caching language preferences for last active "
+                  "users from the db")
+        return
+    if not cursor.rowcount:
+        log.warning('There are no users in the db')
+        return
 
-    else:
-        log.warning('There are no entries about user languages in database.')
-        return False
+    languages_of_users = cursor.fetchall()
+    for line in languages_of_users:
+        log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
+        user_lang[line[0]] = line[1]
+    log.info('Users languages were cached.')
 
 
 def clean_old_user_languages_from_memory(max_users):
@@ -120,24 +132,20 @@ def clean_old_user_languages_from_memory(max_users):
              'ORDER BY MAX(time) '
              'LIMIT {}'.format(user_ids, max_users))
 
-    log.info('Figuring out least active users...')
-    try:
-        cursor = db.execute_query(query)
-    except (MySQLdb.Error, MySQLdb.Warning) as err:
-        log.warning(err)
-        bot.send_message(config.MY_TELEGRAM, text=err)
-        return False
+    log.info('Figuring out the least active users...')
+    cursor = execute_query(query)
+    if not cursor:
+        log.error("Can't figure out the least active users...")
+        return
+    if not cursor.rowcount:
+        log.warning("There are no users in the db")
+        return
 
-    if cursor.rowcount:
-        least_active_users_tuple_of_tuples = cursor.fetchall()
-        # Make list out of tuple of tuples that is returned by MySQL
-        least_active_users = [chat_id[0]
-                              for chat_id
-                              in least_active_users_tuple_of_tuples]
-    else:
-        log.warning('There are no least active users')
-        return False
-
+    least_active_users_tuple_of_tuples = cursor.fetchall()
+    # Make list out of tuple of tuples that is returned by MySQL
+    least_active_users = [chat_id[0]
+                          for chat_id
+                          in least_active_users_tuple_of_tuples]
     log.info('Removing language preferences of %d least '
              'active users from memory...', max_users)
     num_deleted_entries = 0
@@ -146,9 +154,9 @@ def clean_old_user_languages_from_memory(max_users):
         deleted_entry = user_lang.pop(entry, None)
         if deleted_entry:
             num_deleted_entries += 1
-    log.debug('{} entries with users language '
-              'preferences were removed from RAM.'.format(num_deleted_entries))
-    return True
+    log.debug("%d entries with users language preferences "
+              "were removed from RAM.", num_deleted_entries)
+    return
 
 
 def set_user_language(chat_id, lang):
@@ -187,18 +195,23 @@ def get_user_lang(chat_id):
         query = ('SELECT lang '
                  'FROM user_lang_table '
                  'WHERE chat_id={}'.format(chat_id))
-        try:
-            cursor = db.execute_query(query)
-        except (MySQLdb.Error, MySQLdb.Warning) as err:
-            log.warning(err)
+
+        cursor = execute_query(query)
+        if not cursor:
+            error_message = (
+                f"Can't get language of user with id {chat_id} because of "
+                "some database bug. Check db_connector logs. Setting user's"
+                "language to default - en-US")
+
+            log.error(error_message)
+            bot.send_message(chat_id=config.MY_TELEGRAM, text=error_message)
             lang = 'en-US'
             user_lang[chat_id] = lang
             return lang
 
-        if cursor.rowcount:
-            lang = cursor.fetchone()[0]
-            user_lang[chat_id] = lang
-        else:
+        # There is no language tag for this user in the database which means
+        # this user is here for the first time
+        elif not cursor.rowcount:
             lang = 'en-US'
             bot.send_message(config.MY_TELEGRAM, text='You have a new user!')
             log.info('User {} default language for bot is '
@@ -208,6 +221,10 @@ def get_user_lang(chat_id):
             db.execute_query(query)
             db.conn.commit()
             user_lang[chat_id] = lang
+            return lang
+
+        lang = cursor.fetchone()[0]
+        user_lang[chat_id] = lang
 
         if len(user_lang) > 10:
             clean_old_user_languages_from_memory(2)
@@ -223,7 +240,7 @@ def change_user_language(chat_id, curr_lang):
     try:
         set_user_language(chat_id, new_lang)
         return new_lang
-    except Exception:  # who knows what god can send us
+    except Exception:
         log.error(traceback.format_exc())
         bot.send_message(config.MY_TELEGRAM, text=traceback.format_exc())
         return False
@@ -232,6 +249,7 @@ def change_user_language(chat_id, curr_lang):
 def get_admin_stat(command):
     # Function that returns statistics to admin by command
     global start_time  # todo get rid of this global
+    error_answer = "Can't execute your command. Check logs for error"
     answer = 'There is some statistics for you: \n'
 
     # Set to a beginning of the day
@@ -249,7 +267,9 @@ def get_admin_stat(command):
                  'GROUP BY chat_id, last_name, first_name, username '
                  'ORDER BY MAX(time) '
                  'DESC LIMIT 100')
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         user_roster = cursor.fetchall()
         users = ''
         for user in user_roster:
@@ -266,12 +286,16 @@ def get_admin_stat(command):
         log.info('Evaluating total number of photo queries in database...')
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table')
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table '
                  'WHERE chat_id !={}'.format(config.MY_TELEGRAM))
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
         return answer
@@ -282,13 +306,17 @@ def get_admin_stat(command):
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}"'.format(today))
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += f'{cursor.fetchone()[0]} times users sent photos today.'
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}" '
                  'AND chat_id !={}'.format(today, config.MY_TELEGRAM))
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
         return answer
@@ -300,12 +328,16 @@ def get_admin_stat(command):
                  'since the first day and today...')
         query = ('SELECT COUNT(DISTINCT chat_id) '
                  'FROM photo_queries_table')
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += 'There are totally {} users.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(DISTINCT chat_id) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}"'.format(today))
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += f'\n{cursor.fetchone()[0]} users have sent photos today.'
         log.info('Done.')
         return answer
@@ -315,15 +347,19 @@ def get_admin_stat(command):
         log.info('Evaluating number of cameras and smartphones in database...')
         query = ('SELECT COUNT(DISTINCT camera_name) '
                  'FROM photo_queries_table')
-        cursor = db.execute_query(query)
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
         answer += (f'There are totally {cursor.fetchone()[0]} '
                    f'cameras/smartphones.')
         query = ('SELECT COUNT(DISTINCT camera_name) '
                  'FROM photo_queries_table '
                  'WHERE time > "{}"'.format(today))
-        cursor = db.execute_query(query)
-        answer += f'\n{cursor.fetchone()[0]} cameras/smartphones ' \
-                  'were used today.'
+        cursor = execute_query(query)
+        if not cursor:
+            return error_answer
+        answer += (f'\n{cursor.fetchone()[0]} cameras/smartphones '
+                   'were used today.')
         log.info('Done.')
         return answer
 
@@ -341,9 +377,9 @@ def get_admin_stat(command):
 
 
 def turn_bot_off():
-    # Safely turn bot off
-    bot.send_message(config.MY_TELEGRAM,
-                     messages[get_user_lang(config.MY_TELEGRAM)]['bye'])
+    # Safely turn the bot off
+    bot.send_message(chat_id=config.MY_TELEGRAM,
+                     text=messages[get_user_lang(config.MY_TELEGRAM)]['bye'])
     if db.disconnect():
         log.info('Please wait for a sec, bot is turning off...')
         bot.stop_polling()
@@ -351,6 +387,7 @@ def turn_bot_off():
         sys.exit()
     else:
         log.error('Cannot stop bot.')
+        bot.send_message(chat_id=config.MY_TELEGRAM, text='Cannot stop bot.')
 
 
 @bot.message_handler(commands=['start'])
@@ -409,11 +446,15 @@ def handle_menu_response(message):
         log.info('List of most popular countries has '
                  'been returned to %d', chat_id)
 
-    elif message.text.lower() == 'admin' and chat_id == config.MY_TELEGRAM:
-        # It creates inline keyboard with options for admin
-        # Function that handle user interaction
-        # with the keyboard called admin_menu
-        keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
+    elif (message.text.lower() == 'admin' and
+          chat_id == int(config.MY_TELEGRAM)):
+        # Creates inline keyboard with options for admin Function that handle
+        # user interaction with the keyboard called admin_menu
+
+        # Make keyboard object
+        keyboard = types.InlineKeyboardMarkup()
+        # todo make alias "button = types.InlineKeyboardButton"
+        #  to save the space
         keyboard.add(types.InlineKeyboardButton(text='Turn bot off',
                                                 callback_data='off'))
         keyboard.add(types.InlineKeyboardButton(text='Last active users',
@@ -706,17 +747,18 @@ def check_camera_tags(tags):
         if tag:  # If there was this information inside EXIF of the photo
             tag = str(tag).strip()
             log.info('Looking up collation for {}'.format(tag))
-            try:
-                query = ('SELECT right_tag '
-                         'FROM tag_table '
-                         'WHERE wrong_tag="{}"'.format(tag))
-                cursor = db.execute_query(query)
-                if cursor.rowcount:
-                    # Get appropriate tag from the table
-                    tag = cursor.fetchone()[0]
-                    log.info('Tag after looking up in tag_tables - %s.', tag)
-            except (MySQLdb.Error, MySQLdb.Warning) as err:
-                log.error(err)
+            query = ('SELECT right_tag '
+                     'FROM tag_table '
+                     'WHERE wrong_tag="{}"'.format(tag))
+            cursor = execute_query(query)
+            if not cursor:
+                log.error("Can't check the tag because of the db error")
+                log.warning("Tag will stay as is.")
+                continue
+            if cursor.rowcount:
+                # Get appropriate tag from the table
+                tag = cursor.fetchone()[0]
+                log.info('Tag after looking up in tag_tables - %s.', tag)
 
         checked_tags.append(tag)
     return checked_tags
@@ -759,21 +801,23 @@ def get_most_popular_items(item_type, chat_id):
              'GROUP BY {0} '
              'ORDER BY count({0}) '
              'DESC'.format(item_type))
-    try:
-        cursor = db.execute_query(query)
-        if not cursor.rowcount:
-            log.info('Can\'t evaluate a list of the most popular items')
-            return messages[get_user_lang(chat_id)]['no_top']
+    cursor = execute_query(query)
+    if not cursor:
+        log.error("Can't evaluate a list of the most popular items")
+        return messages[get_user_lang(chat_id)]['no_top']
+    if not cursor.rowcount:
+        log.warning('There is nothing in the main database table')
+        bot.send_message(chat_id=config.MY_TELEGRAM,
+                         text='There is nothing in the main database table')
+        return messages[get_user_lang(chat_id)]['no_top']
 
-        popular_items = cursor.fetchall()
-        if len(popular_items) > 30:
-            log.info('Finish evaluating the most popular items')
-            return list_to_ordered_str_list(popular_items[:30])
-        else:
-            log.info('Finish evaluating the most popular items')
-            return list_to_ordered_str_list(popular_items)
-    except (MySQLdb.Error, MySQLdb.Warning) as err:
-        log.error(err)
+    popular_items = cursor.fetchall()
+    if len(popular_items) > 30:
+        log.info('Finish evaluating the most popular items')
+        return list_to_ordered_str_list(popular_items[:30])
+    else:
+        log.info('Finish evaluating the most popular items')
+        return list_to_ordered_str_list(popular_items)
 
 
 @cache_number_users_with_same_feature
@@ -792,11 +836,11 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
     query = ('SELECT DISTINCT chat_id '
              'FROM photo_queries_table '
              'WHERE {}="{}"'.format(feature_type, feature_name))
-    cursor = db.execute_query(query)
-
-    row = cursor.rowcount
-    if not row:
+    cursor = execute_query(query)
+    if not cursor or not cursor.rowcount:
         return None
+    row = cursor.rowcount
+
     if feature_type == 'camera_name':
         # asterisks for markdown - to make font bold
         answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
@@ -817,11 +861,12 @@ def save_user_query_info(data, message, country=None):
     information about this query in database to keep statistics that can be
     shown to user in different ways. It stores time of query, telegram id
     of a user, his camera and lens which were used for taking photo, his
-    first and last name, nickname and country where photo was taken
+    first and last name, nickname and country where the photo was taken
 
     :param data: list with name of camera and lens (if any)
     :param message: Telegram object "message" that contains info about user
-    and such :param country: country where photo was taken
+    and such
+    :param country: country where photo was taken
     :return: None
     """
     camera_name, lens_name = data
@@ -842,24 +887,20 @@ def save_user_query_info(data, message, country=None):
         country_en = '"{}"'.format(country[0])
         country_ru = '"{}"'.format(country[1])
 
-    try:
-        log.info('Adding user query to photo_queries_table...')
+    log.info('Adding user query to photo_queries_table...')
 
-        query = ('INSERT INTO photo_queries_table '
-                 '(chat_id, camera_name, lens_name, first_name, last_name, '
-                 'username, country_en, country_ru) '
-                 'VALUES ({}, {}, {}, {}, {}, {}, '
-                 '{}, {})'.format(chat_id, camera_name, lens_name, first_name,
-                                  last_name, username, country_en,
-                                  country_ru))
+    query = ('INSERT INTO photo_queries_table '
+             '(chat_id, camera_name, lens_name, first_name, last_name, '
+             'username, country_en, country_ru) '
+             'VALUES ({}, {}, {}, {}, {}, {}, '
+             '{}, {})'.format(chat_id, camera_name, lens_name, first_name,
+                              last_name, username, country_en,
+                              country_ru))
 
-        db.execute_query(query)
-        db.conn.commit()
-        log.info('User query was successfully added to the database.')
-    except (MySQLdb.Error, MySQLdb.Warning) as err:
-        log.error('Can\'t save the information about user\'s query.')
-        log.error(err)
-        return
+    db.execute_query(query)
+    db.conn.commit()
+    log.info('User query was successfully added to the database.')
+    return
 
 
 def read_exif(image, message):
@@ -878,7 +919,7 @@ def read_exif(image, message):
     with photo details: time, camera, lens from exif and, if any, messages
     how many other bot users have the same camera/lens.
     Second value in list that this function returns is camera info, which is
-    list with one or two items: first is name of the samera/smartphone,
+    list with one or two items: first is name of the camera/smartphone,
     second, if exists, name of the lens. Third  value in list that this
     function returns is a country where picture was taken.
 
@@ -920,9 +961,8 @@ def read_exif(image, message):
         coordinates = exif_converter_result
         answer.append(coordinates)
         lang = 'ru' if get_user_lang(chat_id) == 'ru-RU' else 'en'
-        get_address_result = get_address(*coordinates, lang)
         try:
-            address, country = get_address_result
+            address, country = get_address(*coordinates, lang)
         except TypeError:
             address, country = '', None
     else:
