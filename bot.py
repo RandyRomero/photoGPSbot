@@ -6,6 +6,9 @@ https://github.com/RandyRomero/photoGPSbot
 """
 
 # todo fix formatting in some log calls
+# todo refactor code to use if the name == main
+# todo check what is wrong with geopy on
+#  last verisons (some deprecation warning)
 
 import os
 import sys
@@ -177,7 +180,7 @@ def set_user_language(chat_id, lang):
     if len(user_lang) > 10:
         clean_old_user_languages_from_memory(2)
 
-    log.info('User {} language was switched to {}'.format(chat_id, lang))
+    log.info('User %s language was switched to %s', chat_id, lang)
 
 
 def get_user_lang(chat_id):
@@ -189,7 +192,7 @@ def get_user_lang(chat_id):
     :param chat_id: user_id
     :return: language tag like ru-RU, en-US as a string
     """
-    log.info('Defining user {} language...'.format(chat_id))
+    log.debug('Defining user %s language...', chat_id)
     lang = user_lang.get(chat_id, None)
     if not lang:
         query = ('SELECT lang '
@@ -214,8 +217,8 @@ def get_user_lang(chat_id):
         elif not cursor.rowcount:
             lang = 'en-US'
             bot.send_message(config.MY_TELEGRAM, text='You have a new user!')
-            log.info('User {} default language for bot is '
-                     'set to be en-US.'.format(chat_id))
+            log.info('User %s default language for bot is set '
+                     'to be en-US.', chat_id)
             query = ('INSERT INTO user_lang_table (chat_id, lang) '
                      'VALUES ({}, "{}")'.format(chat_id, lang))
             db.execute_query(query)
@@ -235,8 +238,8 @@ def get_user_lang(chat_id):
 def change_user_language(chat_id, curr_lang):
     # Switch language from Russian to English or conversely
     new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
-    log.info('Changing user {} language from '
-             '{} to {}...'.format(chat_id, curr_lang, new_lang))
+    log.info('Changing user %s language from %s to %s...', chat_id,
+             curr_lang, new_lang)
     try:
         set_user_language(chat_id, new_lang)
         return new_lang
@@ -568,8 +571,8 @@ def cache_number_users_with_same_feature(func):
             log.info('Returning cached result of ' + func.__name__)
             time_left = (when_was_called + timedelta(minutes=cache_time) -
                          datetime.now())
-            log.debug('Time to reevaluate result of %d is %f', func.__name__,
-                      time_left)
+            log.debug('Time to to reevaluate result of %s is %s',
+                      func.__name__, str(time_left)[:-7])
             return result[result_id]
 
     return func_launcher
@@ -621,8 +624,8 @@ def cache_most_popular_items(func):
             log.debug('Return cached result of %s...', func.__name__)
             time_left = (when_was_called + timedelta(minutes=cache_time) -
                          datetime.now())
-            log.debug('Time to reevaluate result of %s is %f',
-                      func.__name__, time_left)
+            log.debug('Time to reevaluate result of %s is %s',
+                      func.__name__, str(time_left)[:-7])
             return result[result_id]
 
     return function_launcher
