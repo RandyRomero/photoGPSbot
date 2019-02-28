@@ -83,16 +83,23 @@ class DB:
 
         try:
             cursor = self.conn.cursor()
+            log.debug('Executing query...')
+            cursor.execute(query)
+
         # try to reconnect if MySQL server has gone away
         except MySQLdb.OperationalError as e:
-            if e[0] == 2006:
+            if e.args[0] == 2006:
                 log.info(e)
-                log.info("Connecting to the MySQL again...")
+                log.debug("Connecting to the MySQL again...")
                 self._connect()
-                self.execute_query(query)
+                cursor = self.conn.cursor()
+                log.debug('Executing query...')
+                cursor.execute(query)
+            else:
+                log.error(e)
+        except Exception as e:
+            log.error(e)
 
-        log.debug('Executing query...')
-        cursor.execute(query)
         log.debug('The query executed successfully')
         return cursor
 
