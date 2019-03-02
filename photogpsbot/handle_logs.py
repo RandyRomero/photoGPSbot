@@ -30,8 +30,6 @@ from collections import namedtuple
 
 import send2trash
 
-# todo write adequate function descriptions
-
 
 class CustomLogging:
 
@@ -42,6 +40,10 @@ class CustomLogging:
 
     @staticmethod
     def make_new_logger():
+        """
+        Set up a new custom logger for using across modules of the bot
+        :return: None
+        """
         # __name__ needs to add name of corresponding module in log message
         new_log = logging.getLogger(__name__)
         new_log.setLevel(logging.DEBUG)  # set level of messages to be logged
@@ -87,6 +89,11 @@ class CustomLogging:
         CustomLogging.log = new_log
 
     def get_logger(self):
+        """
+        Returns logger
+        :return: custom logger object to be able to log into terminal and
+        a text file
+        """
         if not CustomLogging.log:
             self.make_new_logger()
         return CustomLogging.log
@@ -94,7 +101,9 @@ class CustomLogging:
     def check_logs_size(self):  #
         """
         count size of all already existing logs and create a list of them
-        :return:
+        :return: tuple where the first argument is total size of all files,
+        second is a list of named tuples where each of each represents one
+        log file with its properties
         """
         total_size = 0
         logfile_list = []
@@ -130,13 +139,14 @@ class CustomLogging:
         Remove oldest log files from log folder when
         size of folder is more than max_size.
 
-        Script take creation time of file not from its properties (get.cwd()),
+        Script takes creation time of file not from its properties (get.cwd()),
         but from it's name, because you cannot rely on
         properties in case if log file was copied by
         for example Yandex.Disk, because then creation time is
         time of copying this file from another machine
-        :param max_size:
-        :return:
+        :param max_size: integer that represents threshold after which this
+        function will start to delete old log files
+        :return: None
         """
 
         total_log_size, logfile_list = self.check_logs_size()
