@@ -2,13 +2,13 @@
 Small bot for Telegram that receives your photo and returns you map where
 it was taken.
 Written by Aleksandr Mikheev.
-https://github.com/RandyRomero/photoGPSbot
+https://github.com/RandyRomero/photogpsbot
 """
 
 # todo fix formatting in some log calls
 # todo refactor code to use if the name == main
 # todo check what is wrong with geopy on
-#  last verisons (some deprecation warning)
+#  last versions (some deprecation warning)
 
 import os
 import sys
@@ -29,14 +29,15 @@ import exifread
 import requests
 from geopy.geocoders import Nominatim
 
+from photogpsbot import log, custom_logging
 import config
-from handle_logs import log, clean_log_folder
-import db_connector
+from photogpsbot.db_connector import DB
 
-clean_log_folder(3)
+db = DB()
+custom_logging.clean_log_folder(3)
 
 # Load file with messages for user in two languages
-with open('language_pack.txt', 'r', encoding='utf8') as json_file:
+with open('photogpsbot/language_pack.txt', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
 
 bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
@@ -44,7 +45,6 @@ if not socket.gethostname() == config.PROD_HOST_NAME:
     log.info('Working through proxy.')
     apihelper.proxy = {'https': config.PROXY_CONFIG}
 
-db = db_connector.DB()
 
 # Dictionary that contains user_id -- preferred language for every active user
 user_lang = {}
@@ -1072,7 +1072,7 @@ load_last_user_languages(10)
 
 
 def start_bot():
-    log.info('Starting photoGPSbot...')
+    log.info('Starting photogpsbot...')
     bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
 
 

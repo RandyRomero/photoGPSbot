@@ -7,15 +7,16 @@ Original way to do it was described at
 https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 """
 
-import os
-
 # goes as mysqlclient in requirements
 import MySQLdb
 import sshtunnel
 import socket
 
+from photogpsbot.handle_logs import CustomLogging
+from photogpsbot import log
 import config
-from handle_logs import log
+
+custom_logging = CustomLogging()
 
 
 class DB:
@@ -30,7 +31,7 @@ class DB:
     def _open_ssh_tunnel(self):
         """
         Method that opens ssh tunnel to the server where the database of
-        photoGPSbot is located
+        photogpsbot is located
         :return: None
         """
         log.debug('Establishing SSH tunnel to the server where the database '
