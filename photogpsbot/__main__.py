@@ -192,7 +192,7 @@ def get_user_lang(chat_id):
     :param chat_id: user_id
     :return: language tag like ru-RU, en-US as a string
     """
-    log.debug('Defining user %s language...', chat_id)
+    # log.debug('Defining user %s language...', chat_id)
     lang = user_lang.get(chat_id, None)
     if not lang:
         query = ('SELECT lang '
@@ -568,7 +568,7 @@ def cache_number_users_with_same_feature(func):
             result[result_id] = func(feature_name, device_type, chat_id)
             return result[result_id]
         else:
-            log.info('Returning cached result of ' + func.__name__)
+            log.info('Returning cached result of %s',  func.__name__)
             time_left = (when_was_called + timedelta(minutes=cache_time) -
                          datetime.now())
             log.debug('Time to to reevaluate result of %s is %s',
@@ -644,7 +644,7 @@ def get_address(latitude, longitude, lang):
     """
 
     coordinates = "{}, {}".format(latitude, longitude)
-    log.debug('Getting address from coordinates {}...'.format(coordinates))
+    log.debug('Getting address from coordinates %s...', coordinates)
     geolocator = Nominatim()
 
     try:
@@ -749,7 +749,7 @@ def check_camera_tags(tags):
     for tag in tags:
         if tag:  # If there was this information inside EXIF of the photo
             tag = str(tag).strip()
-            log.info('Looking up collation for {}'.format(tag))
+            log.info('Looking up collation for %s', tag)
             query = ('SELECT right_tag '
                      'FROM tag_table '
                      'WHERE wrong_tag="{}"'.format(tag))
