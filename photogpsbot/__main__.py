@@ -5,7 +5,6 @@ Written by Aleksandr Mikheev.
 https://github.com/RandyRomero/photogpsbot
 """
 
-# todo fix formatting in some log calls
 # todo refactor code to use if the name == main
 # todo check what is wrong with geopy on
 #  last versions (some deprecation warning)
@@ -454,28 +453,21 @@ def handle_menu_response(message):
         # Creates inline keyboard with options for admin Function that handle
         # user interaction with the keyboard called admin_menu
 
-        # Make keyboard object
-        keyboard = types.InlineKeyboardMarkup()
-        # todo make alias "button = types.InlineKeyboardButton"
-        #  to save the space
-        keyboard.add(types.InlineKeyboardButton(text='Turn bot off',
-                                                callback_data='off'))
-        keyboard.add(types.InlineKeyboardButton(text='Last active users',
-                                                callback_data='last active'))
-        keyboard.add(types.InlineKeyboardButton(text='Total number of photos '
-                                                     'were sent',
-                                                callback_data='total number '
-                                                              'photos sent'))
-        keyboard.add(types.InlineKeyboardButton(text='Number of photos today',
-                                                callback_data='photos today'))
-        keyboard.add(types.InlineKeyboardButton(text='Number of users',
-                                                callback_data='number of '
-                                                              'users'))
-        keyboard.add(types.InlineKeyboardButton(text='Number of gadgets',
-                                                callback_data='number '
-                                                              'of gadgets'))
-        keyboard.add(types.InlineKeyboardButton(text='Uptime',
-                                                callback_data='uptime'))
+        keyboard = types.InlineKeyboardMarkup()  # Make keyboard object
+        button = types.InlineKeyboardButton  # just an alias to save space
+
+        keyboard.add(button(text='Turn bot off', callback_data='off'))
+        keyboard.add(button(text='Last active users',
+                            callback_data='last active'))
+        keyboard.add(button(text='Total number of photos were sent',
+                            callback_data='total number photos sent'))
+        keyboard.add(button(text='Number of photos today',
+                            callback_data='photos today'))
+        keyboard.add(button(text='Number of users',
+                            callback_data='number of users'))
+        keyboard.add(button(text='Number of gadgets',
+                            callback_data='number of gadgets'))
+        keyboard.add(button(text='Uptime', callback_data='uptime'))
         bot.send_message(config.MY_TELEGRAM,
                          'Admin commands', reply_markup=keyboard)
 
