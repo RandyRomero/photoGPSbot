@@ -10,39 +10,26 @@ https://github.com/RandyRomero/photogpsbot
 #  last versions (some deprecation warning)
 
 import os
-import sys
-import time
 import json
 from io import BytesIO
 import traceback
 from datetime import datetime, timedelta
-import socket
 
-# goes as pyTelegramBotAPI in requirements
-import telebot
 # goes as mysqlclient in requirements
 import MySQLdb
 from telebot import types
-from telebot import apihelper
 import exifread
 import requests
 from geopy.geocoders import Nominatim
 
-from photogpsbot import log, custom_logging
+from photogpsbot import bot, log, custom_logging, db
 import config
-from photogpsbot.db_connector import DB
 
-db = DB()
 custom_logging.clean_log_folder(3)
 
 # Load file with messages for user in two languages
 with open('photogpsbot/language_pack.txt', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
-
-bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
-if not socket.gethostname() == config.PROD_HOST_NAME:
-    log.info('Working through proxy.')
-    apihelper.proxy = {'https': config.PROXY_CONFIG}
 
 
 # Dictionary that contains user_id -- preferred language for every active user
@@ -105,7 +92,7 @@ def load_last_user_languages(max_users):
 
     cursor = execute_query(query)
     if not cursor:
-        log.error("Can't Caching language preferences for last active "
+        log.error("Can't cache language preferences for last active "
                   "users from the db")
         return
     if not cursor.rowcount:
@@ -250,7 +237,6 @@ def change_user_language(chat_id, curr_lang):
 
 def get_admin_stat(command):
     # Function that returns statistics to admin by command
-    global start_time  # todo get rid of this global
     error_answer = "Can't execute your command. Check logs for error"
     answer = 'There is some statistics for you: \n'
 
@@ -367,7 +353,7 @@ def get_admin_stat(command):
 
     elif command == 'uptime':
         fmt = 'Uptime: {} days, {} hours, {} minutes and {} seconds.'
-        td = datetime.now() - start_time
+        td = datetime.now() - bot.start_time
         # datetime.timedelta.seconds returns you total number of seconds
         # since given time, so you need to perform
         # a little bit of math to make whole hours, minutes and seconds from it
@@ -376,20 +362,6 @@ def get_admin_stat(command):
                             60, td.seconds % 60)
         log.info(uptime)
         return uptime
-
-
-def turn_bot_off():
-    # Safely turn the bot off
-    bot.send_message(chat_id=config.MY_TELEGRAM,
-                     text=messages[get_user_lang(config.MY_TELEGRAM)]['bye'])
-    if db.disconnect():
-        log.info('Please wait for a sec, bot is turning off...')
-        bot.stop_polling()
-        log.info('Auf Wiedersehen! Bot is turned off.')
-        sys.exit()
-    else:
-        log.error('Cannot stop bot.')
-        bot.send_message(chat_id=config.MY_TELEGRAM, text='Cannot stop bot.')
 
 
 @bot.message_handler(commands=['start'])
@@ -487,7 +459,7 @@ def admin_menu(call):  # Respond commands from admin menu
     bot.answer_callback_query(callback_query_id=call.id, show_alert=False)
 
     if call.data == 'off':
-        turn_bot_off()
+        bot.turn_bot_off()
     elif call.data == 'last active':
         bot.send_message(config.MY_TELEGRAM,
                          text=get_admin_stat('last active users'))
@@ -1056,27 +1028,11 @@ def handle_image(message):
              msg.username, msg.id)
 
 
-# I think you can safely cache several hundred or thousand of
-# user-lang pairs without consuming to much memory, but for development
-# purpose I will set it to some minimum to be sure that
-# calling to DB works properly
-load_last_user_languages(10)
+if __name__ == '__main__':
 
-
-def start_bot():
-    log.info('Starting photogpsbot...')
-    bot.polling(none_stop=True, timeout=90)  # Keep bot receiving messages
-
-
-try:
-    start_time = datetime.now()
-    start_bot()
-
-except requests.exceptions.ReadTimeout as e:
-    log.error(e)
-    bot.stop_polling()
-    log.warning('Pausing bot for 30 seconds...')
-    time.sleep(30)
-    log.warning('Try to start the bot again...')
-    start_bot()
-
+    # I think you can safely cache several hundred or thousand of
+    # user-lang pairs without consuming to much memory, but for development
+    # purpose I will set it to some minimum to be sure that
+    # calling to DB works properly
+    load_last_user_languages(10)
+    bot.start_bot()
