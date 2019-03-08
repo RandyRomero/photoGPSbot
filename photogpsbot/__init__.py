@@ -17,6 +17,9 @@ from photogpsbot.helper import send_last_logs
 from photogpsbot.db_connector import Database
 db = Database()
 
+from photogpsbot.user_language import UserLanguage
+user_language = UserLanguage()
+
 
 if not socket.gethostname() == config.PROD_HOST_NAME:
     log.info('Working through proxy.')

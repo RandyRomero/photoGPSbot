@@ -22,200 +22,13 @@ import exifread
 import requests
 from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, log_files, db, send_last_logs
+from photogpsbot import bot, log, log_files, db, user_language
 import config
 
 
 # Load file with messages for user in two languages
 with open('photogpsbot/language_pack.txt', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
-
-# Dictionary that contains user_id -- preferred language for every active user
-user_lang = {}
-
-
-def load_last_user_languages(max_users):
-    """
-    Function that caches preferred language of last active users from database
-    to pc memory
-    :param max_users: number of entries to be cached
-    :return: True if it completed work without errors, False otherwise
-    """
-
-    global user_lang
-    log.debug('Caching users\' languages from DB...')
-
-    # Select id of last active users
-    query = ("SELECT chat_id "
-             "FROM photo_queries_table "
-             "GROUP BY chat_id "
-             "ORDER BY MAX(time) "
-             "DESC LIMIT {};".format(max_users))
-
-    log.info('Figure out last active users...')
-    cursor = db.execute_query(query)
-    if not cursor:
-        log.error("Can't figure out last active users! Check logs")
-        return
-    if not cursor.rowcount:
-        log.warning('There are no users in the db')
-        return
-
-    last_active_users_tuple_of_tuples = cursor.fetchall()
-    # Make list out of tuple of tuples that is returned by MySQL
-    last_active_users = [chat_id[0] for chat_id in
-                         last_active_users_tuple_of_tuples]
-
-    log.debug('Caching language preferences for %d '
-              'last active users from database...', max_users)
-    # Select from db with language preferences of users who
-    # were active recently
-    query = ("SELECT chat_id, lang "
-             "FROM user_lang_table "
-             "WHERE chat_id in {};".format(tuple(last_active_users)))
-
-    cursor = db.execute_query(query)
-    if not cursor:
-        log.error("Can't cache language preferences for last active "
-                  "users from the db")
-        return
-    if not cursor.rowcount:
-        log.warning('There are no users in the db')
-        return
-
-    languages_of_users = cursor.fetchall()
-    for line in languages_of_users:
-        log.debug('chat_id: {}, language: {}'.format(line[0], line[1]))
-        user_lang[line[0]] = line[1]
-    log.info('Users languages were cached.')
-
-
-def clean_old_user_languages_from_memory(max_users):
-    # Function to clean RAM from language preferences of users
-    # who used a bot a long time ago
-
-    global user_lang
-
-    # Select users that the least active recently
-    user_ids = tuple(user_lang.keys())
-    query = ('SELECT chat_id '
-             'FROM photo_queries_table '
-             'WHERE chat_id in {} '
-             'GROUP BY chat_id '
-             'ORDER BY MAX(time) '
-             'LIMIT {}'.format(user_ids, max_users))
-
-    log.info('Figuring out the least active users...')
-    cursor = db.execute_query(query)
-    if not cursor:
-        log.error("Can't figure out the least active users...")
-        return
-    if not cursor.rowcount:
-        log.warning("There are no users in the db")
-        return
-
-    least_active_users_tuple_of_tuples = cursor.fetchall()
-    # Make list out of tuple of tuples that is returned by MySQL
-    least_active_users = [chat_id[0]
-                          for chat_id
-                          in least_active_users_tuple_of_tuples]
-    log.info('Removing language preferences of %d least '
-             'active users from memory...', max_users)
-    num_deleted_entries = 0
-    for entry in least_active_users:
-        log.debug('Deleting {}...'.format(entry))
-        deleted_entry = user_lang.pop(entry, None)
-        if deleted_entry:
-            num_deleted_entries += 1
-    log.debug("%d entries with users language preferences "
-              "were removed from RAM.", num_deleted_entries)
-    return
-
-
-def set_user_language(chat_id, lang):
-    # Function to set language for a user
-
-    log.debug('Updating info about user {} '
-              'language in memory & database...'.format(chat_id))
-    query = ('UPDATE user_lang_table '
-             'SET lang="{}" '
-             'WHERE chat_id={}'.format(lang, chat_id))
-    if not db.add(query):
-        log.error("Can't add new language of %d to the database", chat_id)
-        send_last_logs()
-
-    user_lang[chat_id] = lang
-
-    # Actually we can set length to be much more,
-    # but now I don't have a lot of users, but need to keep an eye whether
-    # this function works well or not
-    if len(user_lang) > 10:
-        clean_old_user_languages_from_memory(2)
-
-    log.info('User %s language was switched to %s', chat_id, lang)
-
-
-def get_user_lang(chat_id):
-    """
-    Function to look up user language in dictionary
-    (which is like cache), then in database (if it is not in dict).
-    If there is not language preference for that user, set en-US by default.
-
-    :param chat_id: user_id
-    :return: language tag like ru-RU, en-US as a string
-    """
-    # log.debug('Defining user %s language...', chat_id)
-    lang = user_lang.get(chat_id, None)
-    if not lang:
-        query = ('SELECT lang '
-                 'FROM user_lang_table '
-                 'WHERE chat_id={}'.format(chat_id))
-
-        cursor = db.execute_query(query)
-        if not cursor:
-            error_message = (
-                f"Can't get language of user with id {chat_id} because of "
-                "some database bug. Check db_connector logs. Setting user's"
-                "language to default - en-US")
-
-            log.error(error_message)
-            bot.send_message(chat_id=config.MY_TELEGRAM, text=error_message)
-            lang = 'en-US'
-            user_lang[chat_id] = lang
-            return lang
-
-        # There is no language tag for this user in the database which means
-        # this user is here for the first time
-        elif not cursor.rowcount:
-            lang = 'en-US'
-            bot.send_message(config.MY_TELEGRAM, text='You have a new user!')
-            log.info('User %s default language for bot is set '
-                     'to be en-US.', chat_id)
-            query = ('INSERT INTO user_lang_table (chat_id, lang) '
-                     'VALUES ({}, "{}")'.format(chat_id, lang))
-            db.execute_query(query)
-            db.conn.commit()
-            user_lang[chat_id] = lang
-            return lang
-
-        lang = cursor.fetchone()[0]
-        user_lang[chat_id] = lang
-
-        if len(user_lang) > 10:
-            clean_old_user_languages_from_memory(2)
-
-    return lang
-
-
-def change_user_language(chat_id, curr_lang):
-    # Switch language from Russian to English or conversely
-    new_lang = 'ru-RU' if curr_lang == 'en-US' else 'en-US'
-    log.info('Changing user %s language from %s to %s...', chat_id,
-             curr_lang, new_lang)
-
-    set_user_language(chat_id, new_lang)
-
-    return new_lang
 
 
 def get_admin_stat(command):
@@ -350,7 +163,7 @@ def get_admin_stat(command):
 @bot.message_handler(commands=['start'])
 def create_main_keyboard(message):
     chat_id = message.chat.id
-    current_user_lang = get_user_lang(chat_id)
+    current_user_lang = user_language.get(chat_id)
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,
                                        resize_keyboard=True)
     markup.row('Русский/English')
@@ -366,11 +179,11 @@ def create_main_keyboard(message):
 def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
     chat_id = message.chat.id
-    current_user_lang = get_user_lang(chat_id)
+    current_user_lang = user_language.get(chat_id)
 
     if message.text == 'Русский/English':
 
-        new_lang = change_user_language(chat_id, current_user_lang)
+        new_lang = user_language.switch(chat_id, current_user_lang)
         if current_user_lang != new_lang:
             bot.send_message(chat_id, messages[new_lang]
                                               ['switch_lang_success'])
@@ -473,7 +286,7 @@ def admin_menu(call):  # Respond commands from admin menu
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
     bot.send_message(message.chat.id,
-                     messages[get_user_lang(message.chat.id)]['as_file'])
+                     messages[user_language.get(message.chat.id)]['as_file'])
     msg = message.from_user
     log_message = ('Name: %s Last name: %s Nickname: %s ID: %d sent '
                    'photo as a photo.', msg.first_name, msg.last_name,
@@ -508,7 +321,7 @@ def cache_number_users_with_same_feature(func):
 
         # Make id in order to cache and return
         # result by feature_type and language of user
-        result_id = '{}_{}'.format(feature_name, get_user_lang(chat_id))
+        result_id = '{}_{}'.format(feature_name, user_language.get(chat_id))
 
         # It's high time to reevaluate result instead
         # of just looking up in cache if countdown went off, if
@@ -561,7 +374,7 @@ def cache_most_popular_items(func):
         # Only top countries can be returned in different languages.
         # For the other types of queries it doesn't mean a thing.
         if item_type == 'country_ru' or item_type == 'country_en':
-            result_id = get_user_lang(chat_id) + item_type
+            result_id = user_language.get(chat_id) + item_type
         else:
             result_id = item_type
 
@@ -635,7 +448,7 @@ def get_coordinates_from_exif(data, chat_id):
     string with error message dedicated to user
     """
 
-    current_user_lang = get_user_lang(chat_id)
+    current_user_lang = user_language.get(chat_id)
 
     def idf_tag_to_coordinate(tag):
         # Convert ifdtag from exifread module to decimal degree format
@@ -761,12 +574,12 @@ def get_most_popular_items(item_type, chat_id):
     cursor = db.execute_query(query)
     if not cursor:
         log.error("Can't evaluate a list of the most popular items")
-        return messages[get_user_lang(chat_id)]['doesnt work']
+        return messages[user_language.get(chat_id)]['doesnt work']
     if not cursor.rowcount:
         log.warning('There is nothing in the main database table')
         bot.send_message(chat_id=config.MY_TELEGRAM,
                          text='There is nothing in the main database table')
-        return messages[get_user_lang(chat_id)]['no_top']
+        return messages[user_language.get(chat_id)]['no_top']
 
     popular_items = cursor.fetchall()
     if len(popular_items) > 30:
@@ -800,13 +613,13 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
 
     if feature_type == 'camera_name':
         # asterisks for markdown - to make font bold
-        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
+        answer += '*{}*{}.'.format(messages[user_language.get(chat_id)]
                                    ['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
-        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
+        answer += '*{}*{}.'.format(messages[user_language.get(chat_id)]
                                    ['lens_users'], str(row - 1))
     elif feature_type == 'country_en':
-        answer += '*{}*{}.'.format(messages[get_user_lang(chat_id)]
+        answer += '*{}*{}.'.format(messages[user_language.get(chat_id)]
                                    ['photos_from_country'], str(row - 1))
 
     return answer
@@ -917,7 +730,7 @@ def read_exif(image, message):
     if isinstance(exif_converter_result, tuple):
         coordinates = exif_converter_result
         answer.append(coordinates)
-        lang = 'ru' if get_user_lang(chat_id) == 'ru-RU' else 'en'
+        lang = 'ru' if user_language.get(chat_id) == 'ru-RU' else 'en'
         try:
             address, country = get_address(*coordinates, lang)
         except TypeError:
@@ -947,7 +760,7 @@ def read_exif(image, message):
 
     # Make user message about camera from exif
     info_about_shot = ''
-    for tag, item in zip(messages[get_user_lang(chat_id)]['camera_info'],
+    for tag, item in zip(messages[user_language.get(chat_id)]['camera_info'],
                          [date_time_str, camera, lens, address]):
         if item:
             info_about_shot += '*{}*: {}\n'.format(tag, item)
@@ -965,7 +778,7 @@ def read_exif(image, message):
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
     chat_id = message.chat.id
-    current_user_lang = get_user_lang(chat_id)
+    current_user_lang = user_language.get(chat_id)
     bot.reply_to(message, messages[current_user_lang]['photo_prcs'])
     msg = message.from_user
     log.info('Name: %s Last name: %s Nickname: %s ID: %d sent photo as a '
@@ -1024,5 +837,5 @@ if __name__ == '__main__':
     # user-lang pairs without consuming to much memory, but for development
     # purpose I will set it to some minimum to be sure that
     # calling to DB works properly
-    load_last_user_languages(10)
+    user_language.cache(10)
     bot.start_bot()
