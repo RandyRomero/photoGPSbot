@@ -1,10 +1,19 @@
+"""
+Module that manages user languages - getting, setting, switching, caching
+"""
+
 import config
 from photogpsbot import bot, log, db, send_last_logs
 
 
 class UserLanguage:
 
+    """
+    Class that manages user languages -- getting, setting, switching, caching
+    """
+
     def __init__(self):
+
         # Dictionary that contains user_id -- preferred language
         # for every active user
         self.user_lang = {}
@@ -35,10 +44,8 @@ class UserLanguage:
             log.warning('There are no users in the db')
             return
 
-        last_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
-        last_active_users = [chat_id[0] for chat_id in
-                             last_active_users_tuple_of_tuples]
+        last_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
 
         log.debug('Caching language preferences for %d '
                   'last active users from database...', max_users)
@@ -63,9 +70,13 @@ class UserLanguage:
             self.user_lang[chat_id] = user_lang
         log.info('Users languages were cached.')
 
-    def clean_cache(self, max_users):
-        # Function to clean RAM from language preferences of users
-        # who used a bot a long time ago
+    def clean_cache(self, num_users):
+        """
+        Method that remove languages tags from cache for the least active users
+        :param num_users: number of the users that the method should remove
+        from cache
+        :return: None
+        """
 
         # Select users that the least active recently
         user_ids = tuple(self.user_lang.keys())
@@ -74,7 +85,7 @@ class UserLanguage:
                  'WHERE chat_id in {} '
                  'GROUP BY chat_id '
                  'ORDER BY MAX(time) '
-                 'LIMIT {}'.format(user_ids, max_users))
+                 'LIMIT {}'.format(user_ids, num_users))
 
         log.info('Figuring out the least active users...')
         cursor = db.execute_query(query)
@@ -85,34 +96,37 @@ class UserLanguage:
             log.warning("There are no users in the db")
             return
 
-        least_active_users_tuple_of_tuples = cursor.fetchall()
         # Make list out of tuple of tuples that is returned by MySQL
-        least_active_users = [chat_id[0]
-                              for chat_id
-                              in least_active_users_tuple_of_tuples]
+        least_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
         log.info('Removing language preferences of %d least '
-                 'active users from memory...', max_users)
+                 'active users from memory...', num_users)
         num_deleted_entries = 0
         for entry in least_active_users:
-            log.debug('Deleting {}...'.format(entry))
+            log.debug('Deleting %s...', entry)
             deleted_entry = self.user_lang.pop(entry, None)
             if deleted_entry:
                 num_deleted_entries += 1
         log.debug("%d entries with users language preferences "
                   "were removed from RAM.", num_deleted_entries)
-        return
 
     def set(self, chat_id, lang):
-        # Function to set language for a user
-
-        log.debug('Updating info about user {} '
-                  'language in memory & database...'.format(chat_id))
+        """
+        Sets opposite langage tag of what user had before. Methods adds new
+        language tag in a database and in dictionary
+        :param chat_id: id of a Telegram user
+        :param lang: string with a language tag
+        :return: None
+        """
+        log.debug('Updating info about user %d language '
+                  'in memory & database...', chat_id)
         query = ('UPDATE user_lang_table '
                  'SET lang="{}" '
                  'WHERE chat_id={}'.format(lang, chat_id))
         if not db.add(query):
             log.error("Can't add new language of %d to the database", chat_id)
             send_last_logs()
+            self.user_lang[chat_id] = lang
+            return
 
         self.user_lang[chat_id] = lang
 
@@ -128,10 +142,11 @@ class UserLanguage:
         """
         Function to look up user language in dictionary
         (which is like cache), then in database (if it is not in dict).
-        If there is not language preference for that user, set en-US by default.
+        If there is not language preference for that user, set en-US
+        by default.
 
-        :param chat_id: user_id
-        :return: language tag like ru-RU, en-US as a string
+        :param chat_id: id of a Telegram user
+        :return: string with a language tag like ru-RU, en-US
         """
         # log.debug('Defining user %s language...', chat_id)
         lang = self.user_lang.get(chat_id, None)
