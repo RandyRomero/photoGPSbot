@@ -23,7 +23,8 @@
         "switch_lang_success": "Now I'm speaking English.",
         "top_cams": "The most popular cameras/smartphones",
         "top_countries": "The most popular countries",
-        "top_lens": "The most popular lens"
+        "top_lens": "The most popular lens",
+        "doesnt work": "Sorry, something went wrong, try it later please"
     },
     "ru-RU": {
         "as_file": "Прости, но фотографию нужно отправлять, как файл. Если отправлять её просто как фото, то Telegram сожмёт её и выбросит данные о местоположении, и я не смогу тебе его прислать.",
@@ -49,6 +50,7 @@
         "switch_lang_success": "Теперь я говорю по-русски!",
         "top_cams": "Самые популярные смартфоны/камеры пользователей бота",
         "top_countries": "Самые популярные страны пользователей бота",
-        "top_lens": "Самые популярные объективы пользователей бота"
+        "top_lens": "Самые популярные объективы пользователей бота",
+        "doesnt work": "Извини, но что-то пошло не так. Попробуй позже"
     }
 }

@@ -7,19 +7,18 @@ Original way to do it was described at
 https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 """
 
+import socket
+import traceback
+
 # goes as mysqlclient in requirements
 import MySQLdb
 import sshtunnel
-import socket
 
-from photogpsbot.handle_logs import CustomLogging
-from photogpsbot import log
+from photogpsbot import log, send_last_logs
 import config
 
-custom_logging = CustomLogging()
 
-
-class DB:
+class Database:
     """
     Class that provides method to execute queries and handles connection to
     the MySQL database directly and via ssh if necessary
@@ -73,7 +72,7 @@ class DB:
                                     charset='utf8')
         log.info('Connected to the database.')
 
-    def execute_query(self, query):
+    def execute_query(self, query, trials=0):
         """
         Executes a given query
         :param query: query to execute
@@ -86,23 +85,46 @@ class DB:
             cursor = self.conn.cursor()
             log.debug('Executing query...')
             cursor.execute(query)
+            log.debug('The query executed successfully')
+            return cursor
 
         # try to reconnect if MySQL server has gone away
         except MySQLdb.OperationalError as e:
-            if e.args[0] == 2006:
+
+            # (2013, Lost connection to MySQL server during query)
+            # (2006, Server has gone away)
+            if e.args[0] in [2006, 2013]:
                 log.info(e)
                 log.debug("Connecting to the MySQL again...")
+
                 self._connect()
-                cursor = self.conn.cursor()
-                log.debug('Executing query...')
-                cursor.execute(query)
+                if trials > 3:
+                    send_last_logs()
+                    return None
+
+                trials += 1
+                # trying to execute query one more time
+                self.execute_query(query)
             else:
                 log.error(e)
-        except Exception as e:
-            log.error(e)
+                send_last_logs()
+        except Exception:
+            error = traceback.format_exc()
+            log.error(error)
+            send_last_logs()
 
-        log.debug('The query executed successfully')
-        return cursor
+    def add(self, query):
+        """
+        Shortcut to add something to a database
+        :param query: query to execute
+        :return: boolean - True if the method succeeded and False otherwise
+        """
+
+        if self.execute_query(query):
+            self.conn.commit()
+            return True
+        else:
+            return False
 
     def disconnect(self):
         """

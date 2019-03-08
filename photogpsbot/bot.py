@@ -1,3 +1,8 @@
+"""
+Use this module to get bot to work and communicate with Telegram servers
+"""
+
+
 import requests
 import time
 from datetime import datetime
@@ -7,12 +12,13 @@ import sys
 import telebot
 
 import config
-from photogpsbot import log, db
+from photogpsbot import log
 
 
 class TelegramBot(telebot.TeleBot):
     """
-    Adds a couple of useful methods to TeleBot object.
+    Adds a couple of useful methods to TeleBot object for restating bot in
+    case of errors for example
     """
 
     def __init__(self, token, threaded=True, skip_pending=False,
@@ -48,21 +54,15 @@ class TelegramBot(telebot.TeleBot):
             log.warning('Try to start the bot again...')
             self._run()
 
-    def turn_bot_off(self):
+    def turn_off(self):
         """
-        Safely turn the bot off, closing db and messaging to its admin
-
-        :return:
+        Safely turn the bot off and message to its admin
+        :return: None
         """
 
         self.send_message(chat_id=config.MY_TELEGRAM, text='bye')
+        log.info('Please wait for a sec, bot is turning off...')
+        self.stop_polling()
+        log.info('Auf Wiedersehen! Bot is turned off.')
+        sys.exit()
 
-        if db.disconnect():
-            log.info('Please wait for a sec, bot is turning off...')
-            self.stop_polling()
-            log.info('Auf Wiedersehen! Bot is turned off.')
-            sys.exit()
-        else:
-            log.error('Cannot stop bot.')
-            self.send_message(chat_id=config.MY_TELEGRAM,
-                              text='Cannot stop bot.')

@@ -4,3 +4,4 @@ log/
 prod.txt
 *.pyc
 .env
+misc/
