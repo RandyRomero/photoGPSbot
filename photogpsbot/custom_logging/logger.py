@@ -25,7 +25,7 @@ def make_custom_logger():
 
     log = None
     return_counter = 0
-    log_folder = '../log'
+    log_folder = './log'
 
     def make_new_logger():
         """

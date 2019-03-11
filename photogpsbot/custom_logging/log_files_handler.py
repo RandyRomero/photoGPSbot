@@ -38,6 +38,8 @@ class LogFiles:
 
         # Get name and creation time of every logfile
         for root, subfolders, logfiles in os.walk(self.log_folder):
+            if not logfiles:
+                return []
             for logfile in logfiles:
                 # Get date and time as a string from a file name
                 regex = re.compile(r'(\d{4}-\d{2}-\d{2}__\d{2}h\d{2}m)')
@@ -64,8 +66,9 @@ class LogFiles:
         """
         logfile_list = self.get_list()
         total_size = 0
-        for file in logfile_list:
-            total_size += file.size
+        if logfile_list:
+            for file in logfile_list:
+                total_size += file.size
 
         self.log.info('There is %.2f MB of logs.\n' % (total_size / 1024**2))
 
