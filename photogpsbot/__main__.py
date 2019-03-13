@@ -13,22 +13,15 @@ interactive menus, to handle user language, to process user images
 
 import os
 import json
-from io import BytesIO
 import traceback
 from datetime import datetime, timedelta
 
 from telebot import types
 import exifread
 import requests
-from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, log_files, db, user_language
+from photogpsbot import bot, log, log_files, db, user_language, messages
 import config
-
-
-# Load file with messages for user in two languages
-with open('photogpsbot/language_pack.txt', 'r', encoding='utf8') as json_file:
-    messages = json.load(json_file)
 
 
 def get_admin_stat(command):
@@ -788,6 +781,7 @@ def handle_image(message):
     # Get temporary link to a photo that user has sent to bot
     file_path = file_id.file_path
     # Download photo that got telegram bot from user
+    # todo fix this (we don't use prod anymore)
     if os.path.exists('prod.txt'):
         r = requests.get('https://api.telegram.org/file/bot{0}/{1}'
                          .format(config.TELEGRAM_TOKEN, file_path))
