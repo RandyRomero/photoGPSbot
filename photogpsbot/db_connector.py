@@ -104,7 +104,7 @@ class Database:
 
                 trials += 1
                 # trying to execute query one more time
-                self.execute_query(query)
+                return self.execute_query(query, trials)
             else:
                 log.error(e)
                 send_last_logs()
