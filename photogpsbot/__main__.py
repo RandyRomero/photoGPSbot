@@ -12,13 +12,14 @@ interactive menus, to handle user language, to process user images
 #  last versions (some deprecation warning)
 
 import os
-import json
+from io import BytesIO
 import traceback
 from datetime import datetime, timedelta
 
 from telebot import types
 import exifread
 import requests
+from geopy.geocoders import Nominatim
 
 from photogpsbot import bot, log, log_files, db, user_language, messages
 import config
