@@ -13,7 +13,7 @@ class User:
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_message_with_image(message):
 
-    user = users.find_by_chat_id(message)
+    user = users.find_user(message)
     current_user_lang = user_language.get(chat_id)
     bot.reply_to(message, messages[current_user_lang]['photo_prcs'])
     msg = message.from_user

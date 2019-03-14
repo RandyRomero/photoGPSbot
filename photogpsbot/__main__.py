@@ -21,7 +21,7 @@ import exifread
 import requests
 from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, log_files, db, user_language, messages
+from photogpsbot import bot, log, log_files, db, users, messages
 import config
 
 
@@ -172,8 +172,9 @@ def create_main_keyboard(message):
 @bot.message_handler(content_types=['text'])
 def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
-    chat_id = message.chat.id
-    current_user_lang = user_language.get(chat_id)
+    # chat_id = message.chat.id
+    # current_user_lang = user_language.get(chat_id)
+    current_user_lang = users.find_user(message).get_language()
 
     if message.text == 'Русский/English':
 
@@ -834,5 +835,5 @@ if __name__ == '__main__':
     # user-lang pairs without consuming to much memory, but for development
     # purpose I will set it to some minimum to be sure that
     # calling to DB works properly
-    user_language.cache(10)
+    # user_language.cache(10)
     bot.start_bot()
