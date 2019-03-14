@@ -661,8 +661,10 @@ def save_user_query_info(data, message, country=None):
                               last_name, username, country_en,
                               country_ru))
 
-    db.execute_query(query)
-    db.conn.commit()
+    if not db.add(query):
+        log.warning("Cannot add user's query into database")
+        return
+
     log.info('User query was successfully added to the database.')
     return
 
