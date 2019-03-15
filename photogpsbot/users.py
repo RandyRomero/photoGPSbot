@@ -85,15 +85,96 @@ class Users:
     def __init__(self):
         self.users = {}
 
-    def cache(self):
-        # Caches most recent users from the database
-        # todo implement caching function
-        pass
+    def cache(self, num_users):
+        """
+        Method that caches preferred language of last active users from
+        database to a variable
+        :param num_users: number of entries to be cached
+        :return: True if it completed work without errors, False otherwise
+        """
 
-    def clean_cache(self):
-        # Remove the least active users from cache
-        # todo implement cleaning cache
-        pass
+        log.debug("Caching users' languages from DB...")
+
+        # Select id of last active users
+        query = ("SELECT chat_id "
+                 "FROM photo_queries_table "
+                 "GROUP BY chat_id "
+                 "ORDER BY MAX(time) "
+                 f"DESC LIMIT {num_users};")
+
+        log.info('Figure out last active users...')
+        cursor = db.execute_query(query)
+        if not cursor:
+            log.error("Can't figure out last active users! Check logs")
+            return
+        if not cursor.rowcount:
+            log.warning('There are no entries in the photo_queries_table')
+            return
+
+        # Make list out of tuple of tuples that is returned by MySQL
+        last_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
+
+        log.debug('Getting language preferences for %d '
+                  'last active users from database...', num_users)
+        # Select from db with language preferences of users who
+        # were active recently
+        query = ("SELECT chat_id, language "
+                 "FROM users "
+                 f"WHERE chat_id in {tuple(last_active_users)};")
+
+        cursor = db.execute_query(query)
+        if not cursor:
+            log.error("Can't get language preferences for last active "
+                      "users from the db")
+            return
+        if not cursor.rowcount:
+            log.warning('There are no users in the db')
+            return
+
+        languages_of_users = cursor.fetchall()
+        for chat_id, user_lang in languages_of_users:
+            log.debug('chat_id: %d, language: %s', chat_id, user_lang)
+            self.find_user(chat_id)._lang = user_lang
+        log.info('Users languages were cached.')
+
+    def clean_cache(self, num_users):
+        """
+        Method that remove languages tags from cache for the least active users
+        :param num_users: number of the users that the method should remove
+        from cache
+        :return: None
+        """
+
+        log.info('Figuring out the least active users...')
+        # Select users that the least active recently
+        user_ids = tuple(self.users.keys())
+        query = ('SELECT chat_id '
+                 'FROM photo_queries_table '
+                 f'WHERE chat_id in {user_ids} '
+                 'GROUP BY chat_id '
+                 'ORDER BY MAX(time) '
+                 f'LIMIT {num_users}')
+
+        cursor = db.execute_query(query)
+        if not cursor:
+            log.error("Can't figure out the least active users...")
+            return
+        if not cursor.rowcount:
+            log.warning("There are no users in the db")
+            return
+
+        # Make list out of tuple of tuples that is returned by MySQL
+        least_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
+        log.info('Removing language preferences of %d least '
+                 'active users from memory...', num_users)
+        num_deleted_entries = 0
+        for entry in least_active_users:
+            log.debug('Deleting %s...', entry)
+            deleted_entry = self.users.pop(entry, None)
+            if deleted_entry:
+                num_deleted_entries += 1
+        log.debug("%d entries with users language preferences "
+                  "were removed from RAM.", num_deleted_entries)
 
     @staticmethod
     def _add_to_db(user):
