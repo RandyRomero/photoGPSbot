@@ -22,7 +22,7 @@ class LogFiles:
     """
     def __init__(self):
         self.log = log
-        self.log_folder = '../log'
+        self.log_folder = './log'
         self.LogFile = namedtuple('LogFile', 'path, creation_time, size')
         self.logfile_list = []
 
