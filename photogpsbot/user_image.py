@@ -270,6 +270,7 @@ class ImageHandler:
         :param country: country where photo was taken
         :return: None
         """
+        # todo python None should work as is, so do not insert NULL
         camera_name, lens_name = image_data.camera, image_data.lens
         camera_name = 'NULL' if not camera_name else f'"{camera_name}"'
 
