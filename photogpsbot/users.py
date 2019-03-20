@@ -6,7 +6,7 @@ from photogpsbot import bot, log, db, send_last_logs
 
 class User:
     def __init__(self, chat_id, first_name, last_name, nickname,
-                 language='en-EN'):
+                 language='en-US'):
         self.chat_id = chat_id
         self.first_name = first_name
         self.last_name = last_name
@@ -19,27 +19,25 @@ class User:
         adds new language tag in a database and in dictionary
         :return: None
         """
-        log.debug('Updating info about user %d language '
-                  'in memory & database...', self.chat_id)
+        log.debug('Updating info about user %s language '
+                  'in memory & database...', self)
 
         self._lang = lang
 
         query = ('UPDATE users '
-                 f'SET language={self._lang} '
+                 f'SET language="{self._lang}" '
                  f'WHERE chat_id={self.chat_id}')
 
         if not db.add(query):
             log.error("Can't add new language of %d to the database", self)
             send_last_logs()
 
-        return
-
     def get_language(self):
         if self._lang:
             return self._lang
 
-        query = f'SELECT language WHERE chat_id={self.chat_id}'
-        cursor = db.cursor(query)
+        query = f'SELECT language FROM users WHERE chat_id={self.chat_id}'
+        cursor = db.execute_query(query)
         if not cursor:
             log.error("Can't get language of %s because of some database "
                       "bug. Check db_connector logs. Setting user'slanguage "
@@ -61,7 +59,7 @@ class User:
             db.add(query)
             return self._lang
 
-        lang = cursor.fetchone()[0]
+        lang = cursor.fetchone()
         self._lang = lang
         return lang
 
@@ -93,11 +91,11 @@ class Users:
         :return: True if it completed work without errors, False otherwise
         """
 
-        log.debug("Caching users' languages from DB...")
+        log.debug("Start caching last active users from the DB...")
 
         # Select id of last active users
         query = ("SELECT chat_id "
-                 "FROM photo_queries_table "
+                 "FROM photo_queries_table2 "
                  "GROUP BY chat_id "
                  "ORDER BY MAX(time) "
                  f"DESC LIMIT {num_users};")
@@ -108,7 +106,7 @@ class Users:
             log.error("Can't figure out last active users! Check logs")
             return
         if not cursor.rowcount:
-            log.warning('There are no entries in the photo_queries_table')
+            log.warning('There are no entries in the photo_queries_table2')
             return
 
         # Make list out of tuple of tuples that is returned by MySQL
@@ -118,7 +116,8 @@ class Users:
                   'last active users from database...', num_users)
         # Select from db with language preferences of users who
         # were active recently
-        query = ("SELECT chat_id, language "
+        query = ("SELECT chat_id, first_name, nickname, last_name, "
+                 "language "
                  "FROM users "
                  f"WHERE chat_id in {tuple(last_active_users)};")
 
@@ -131,11 +130,13 @@ class Users:
             log.warning('There are no users in the db')
             return
 
-        languages_of_users = cursor.fetchall()
-        for chat_id, user_lang in languages_of_users:
-            log.debug('chat_id: %d, language: %s', chat_id, user_lang)
-            self.find_user(chat_id)._lang = user_lang
-        log.info('Users languages were cached.')
+        users = cursor.fetchall()
+        for items in users:
+            # if chat_id of a user is not known to the program
+            if items[0] not in self.users:
+                self.users[items[0]] = User(*items)
+                log.debug("Caching user: %s", self.users[items[0]])
+        log.info('Users have been cached.')
 
     def clean_cache(self, num_users):
         """
@@ -149,7 +150,7 @@ class Users:
         # Select users that the least active recently
         user_ids = tuple(self.users.keys())
         query = ('SELECT chat_id '
-                 'FROM photo_queries_table '
+                 'FROM photo_queries_table2 '
                  f'WHERE chat_id in {user_ids} '
                  'GROUP BY chat_id '
                  'ORDER BY MAX(time) '
@@ -178,25 +179,47 @@ class Users:
 
     @staticmethod
     def _add_to_db(user):
-        query = (f'INSERT INTO users (chat_id, first_name, '
-                 'nickname, last_name, language) '
-                 f'VALUES ({user.chat_id}, {user.first_name}, '
-                 f'{user.nickname}, {user.last_name}, {user._lang})')
+        query = ('INSERT INTO users (chat_id, first_name, nickname, '
+                 'last_name, language) '
+                 f'VALUES ({user.chat_id}, "{user.first_name}", '
+                 f'"{user.nickname}", "{user.last_name}", "{user._lang}")')
         if not db.add(query):
             log.warning("Cannot add user into database")
         else:
             log.info(f"User {user} was successfully added to the users db")
 
     def add_new_one(self, message):
-        chat_id = message.chat_id
+        chat_id = message.chat.id
         msg = message.from_user
         user = User(chat_id, msg.first_name, msg.last_name, msg.username)
         self.users[chat_id] = user
         self._add_to_db(user)
         return user
 
-    def find_user(self, message):
-        user = self.users.get(message.chat_id, None)
+    def find_user(self, message=None, chat_id=None):
+
+        # Look up user by chat_id - usually when the bot caches users from the
+        # datatable of users' queries
+        if chat_id:
+            user = self.users.get(chat_id, None)
+            if not user:
+                query = 'SELECT * FROM users'
+                cursor = db.execute_query(query)
+                if not cursor:
+                    log.error(f'Cannot look up the user with chat id {chat_id}'
+                              ' in the database because of some db error')
+                    return None
+                if not cursor.rowcount:
+                    log.error('There is definitely should be the user with '
+                              f'chat id {chat_id} in the database, but some'
+                              'how his is not there')
+                    return None
+
+            return user
+
+        # Look up a user by a Message object which we get together with request
+        # from Telegram
+        user = self.users.get(message.chat.id, None)
         if not user:
             user = self.add_new_one(message)
 
