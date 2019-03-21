@@ -22,9 +22,6 @@ from photogpsbot.helper import send_last_logs
 from photogpsbot.db_connector import Database
 db = Database()
 
-from photogpsbot.user_language import UserLanguage
-user_language = UserLanguage()
-
 from photogpsbot.users import Users
 users = Users()
 
