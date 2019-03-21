@@ -76,6 +76,8 @@ class Database:
         """
         Executes a given query
         :param query: query to execute
+        :param trials: integer that denotes number of trials to execute
+        a query in case of known errors
         :return: cursor object
         """
         if not self.conn or not self.conn.open:
@@ -83,9 +85,7 @@ class Database:
 
         try:
             cursor = self.conn.cursor()
-            log.debug('Executing query...')
             cursor.execute(query)
-            log.debug('The query executed successfully')
             return cursor
 
         # try to reconnect if MySQL server has gone away
@@ -95,7 +95,7 @@ class Database:
             # (2006, Server has gone away)
             if e.args[0] in [2006, 2013]:
                 log.info(e)
-                log.debug("Connecting to the MySQL again...")
+                # log.debug("Connecting to the MySQL again...")
 
                 self._connect()
                 if trials > 3:

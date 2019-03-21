@@ -11,8 +11,12 @@ interactive menus, to handle user language, to process user images
 # todo check what is wrong with geopy on
 #  last versions (some deprecation warning)
 
+# todo check queries in admin stat menu
+# todo get rid of everything superfluous after if name == main
+# todo rewrite the processing of images
+# todo update dosctrings and comments
+
 import os
-import json
 from io import BytesIO
 import traceback
 from datetime import datetime, timedelta
@@ -22,13 +26,8 @@ import exifread
 import requests
 from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, log_files, db, user_language
+from photogpsbot import bot, log, log_files, db, users, messages
 import config
-
-
-# Load file with messages for user in two languages
-with open('photogpsbot/language_pack.txt', 'r', encoding='utf8') as json_file:
-    messages = json.load(json_file)
 
 
 def get_admin_stat(command):
@@ -46,36 +45,41 @@ def get_admin_stat(command):
     if command == 'last active users':
         log.info('Evaluating last active users with date of '
                  'last time when they used bot...')
-        query = ('SELECT MAX(time), last_name, first_name, username '
-                 'FROM photo_queries_table '
-                 'GROUP BY chat_id, last_name, first_name, username '
+
+        query = ('SELECT chat_id '
+                 'FROM photo_queries_table2 '
+                 'GROUP BY chat_id '
                  'ORDER BY MAX(time) '
                  'DESC LIMIT 100')
+
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
-        user_roster = cursor.fetchall()
-        users = ''
-        for user in user_roster:
-            for item in user:
-                users += '{} '.format(item)
-            users += '\n'
-        answer += 'Up to 100 last active users by the time ' \
-                  'when they sent picture last time:\n'
-        answer += users
+        chat_ids = cursor.fetchall()
+        bot_users = ''
+        i = 1
+        for chat_id in chat_ids:
+            user = users.find_user(chat_id=chat_id[0])
+            if not user:
+                continue
+            bot_users += f'{i}. {user}\n'
+            i += 1
+        answer = ('Up to 100 last active users by the time when they sent '
+                  'picture last time:\n')
+        answer += bot_users
         log.info('Done.')
         return answer
 
     elif command == 'total number photos sent':
         log.info('Evaluating total number of photo queries in database...')
         query = ('SELECT COUNT(chat_id) '
-                 'FROM photo_queries_table')
+                 'FROM photo_queries_table2')
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(chat_id) '
-                 'FROM photo_queries_table '
+                 'FROM photo_queries_table2 '
                  'WHERE chat_id !={}'.format(config.MY_TELEGRAM))
         cursor = db.execute_query(query)
         if not cursor:
@@ -88,14 +92,14 @@ def get_admin_stat(command):
         # Show how many photos have been sent since 00:00:00 of today
         log.info('Evaluating number of photos which were sent today.')
         query = ('SELECT COUNT(chat_id) '
-                 'FROM photo_queries_table '
+                 'FROM photo_queries_table2 '
                  'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
         answer += f'{cursor.fetchone()[0]} times users sent photos today.'
         query = ('SELECT COUNT(chat_id) '
-                 'FROM photo_queries_table '
+                 'FROM photo_queries_table2 '
                  'WHERE time > "{}" '
                  'AND chat_id !={}'.format(today, config.MY_TELEGRAM))
         cursor = db.execute_query(query)
@@ -111,13 +115,13 @@ def get_admin_stat(command):
         log.info('Evaluating number of users that use bot '
                  'since the first day and today...')
         query = ('SELECT COUNT(DISTINCT chat_id) '
-                 'FROM photo_queries_table')
+                 'FROM photo_queries_table2')
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
         answer += 'There are totally {} users.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(DISTINCT chat_id) '
-                 'FROM photo_queries_table '
+                 'FROM photo_queries_table2 '
                  'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
         if not cursor:
@@ -130,14 +134,14 @@ def get_admin_stat(command):
         # To show you number smartphones + cameras in database
         log.info('Evaluating number of cameras and smartphones in database...')
         query = ('SELECT COUNT(DISTINCT camera_name) '
-                 'FROM photo_queries_table')
+                 'FROM photo_queries_table2')
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
         answer += (f'There are totally {cursor.fetchone()[0]} '
                    f'cameras/smartphones.')
         query = ('SELECT COUNT(DISTINCT camera_name) '
-                 'FROM photo_queries_table '
+                 'FROM photo_queries_table2 '
                  'WHERE time > "{}"'.format(today))
         cursor = db.execute_query(query)
         if not cursor:
@@ -162,15 +166,15 @@ def get_admin_stat(command):
 
 @bot.message_handler(commands=['start'])
 def create_main_keyboard(message):
-    chat_id = message.chat.id
-    current_user_lang = user_language.get(chat_id)
+    user = users.find_user(message)
+    current_user_lang = user.get_language()
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,
                                        resize_keyboard=True)
     markup.row('Русский/English')
     markup.row(messages[current_user_lang]['top_cams'])
     markup.row(messages[current_user_lang]['top_lens'])
     markup.row(messages[current_user_lang]['top_countries'])
-    bot.send_message(chat_id, messages[current_user_lang]['menu_header'],
+    bot.send_message(user.chat_id, messages[current_user_lang]['menu_header'],
                      reply_markup=markup)
 
 
@@ -178,48 +182,47 @@ def create_main_keyboard(message):
 @bot.message_handler(content_types=['text'])
 def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
-    chat_id = message.chat.id
-    current_user_lang = user_language.get(chat_id)
+    current_user_lang = users.find_user(message).get_language()
+    user = users.find_user(message)
 
     if message.text == 'Русский/English':
 
-        new_lang = user_language.switch(chat_id, current_user_lang)
+        new_lang = users.find_user(message).switch_language()
         if current_user_lang != new_lang:
-            bot.send_message(chat_id, messages[new_lang]
-                                              ['switch_lang_success'])
-            print('current language:', current_user_lang)
-            print('new language:', new_lang)
+            bot.send_message(user.chat_id, messages[new_lang]
+                             ['switch_lang_success'])
             create_main_keyboard(message)
         else:
-            bot.send_message(chat_id, messages[new_lang]
-                                              ['switch_lang_failure'])
+            bot.send_message(user.chat_id, messages[new_lang]
+                             ['switch_lang_failure'])
             create_main_keyboard(message)
 
     elif message.text == messages[current_user_lang]['top_cams']:
-        log.info('User {} asked for top cams'.format(chat_id))
-        bot.send_message(chat_id,
-                         text=get_most_popular_items('camera_name', chat_id))
+        log.info('User %s asked for top cams', user)
+        bot.send_message(user.chat_id,
+                         text=get_most_popular_items('camera_name', message))
         log.info('List of most popular cameras '
-                 'has been returned to %d', chat_id)
+                 'has been returned to %s', user)
 
     elif message.text == messages[current_user_lang]['top_lens']:
-        log.info('User {} asked for top lens'.format(chat_id))
-        bot.send_message(chat_id,
-                         text=get_most_popular_items('lens_name', chat_id))
-        log.info('List of most popular lens has been returned to %d', chat_id)
+        log.info('User %s asked for top lens', user)
+        bot.send_message(user.chat_id,
+                         text=get_most_popular_items('lens_name',
+                                                     message))
+        log.info('List of most popular lens has been returned to %s', user)
 
     elif message.text == messages[current_user_lang]['top_countries']:
-        log.info('User {} asked for top countries'.format(chat_id))
+        log.info('User %s asked for top countries', user)
         lang_table_name = ('country_ru'
                            if current_user_lang == 'ru-RU'
                            else 'country_en')
-        bot.send_message(chat_id,
-                         text=get_most_popular_items(lang_table_name, chat_id))
+        bot.send_message(user.chat_id,
+                         text=get_most_popular_items(lang_table_name, message))
         log.info('List of most popular countries has '
-                 'been returned to %d', chat_id)
+                 'been returned to %s', user)
 
     elif (message.text.lower() == 'admin' and
-          chat_id == int(config.MY_TELEGRAM)):
+          user.chat_id == int(config.MY_TELEGRAM)):
         # Creates inline keyboard with options for admin Function that handle
         # user interaction with the keyboard called admin_menu
 
@@ -242,13 +245,11 @@ def handle_menu_response(message):
                          'Admin commands', reply_markup=keyboard)
 
     else:
-        msg = message.from_user
-        log.info('Name: %s Last name: %s Nickname: %s ID: %d sent text '
-                 'message.', msg.first_name, msg.last_name,
-                 msg.username, msg.id)
+        log.info('%s sent text message.', user)
 
         # Answer to user that bot can't make a conversation with him
-        bot.send_message(chat_id, messages[current_user_lang]['dont_speak'])
+        bot.send_message(user.chat_id,
+                         messages[current_user_lang]['dont_speak'])
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -285,13 +286,9 @@ def admin_menu(call):  # Respond commands from admin menu
 
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
-    bot.send_message(message.chat.id,
-                     messages[user_language.get(message.chat.id)]['as_file'])
-    msg = message.from_user
-    log_message = ('Name: %s Last name: %s Nickname: %s ID: %d sent '
-                   'photo as a photo.', msg.first_name, msg.last_name,
-                   msg.username, msg.id)
-    log.info(log_message)
+    user = users.find_user(message)
+    bot.send_message(user.chat_id, messages[user.get_language()]['as_file'])
+    log.info('%s sent photo as a photo.', user)
 
 
 def dedupe_string(string):
@@ -313,7 +310,7 @@ def cache_number_users_with_same_feature(func):
     when_was_called = None
     result = {}
 
-    def func_launcher(feature_name, device_type, chat_id):
+    def func_launcher(feature_name, device_type, message):
         nonlocal func
         nonlocal result
         nonlocal when_was_called
@@ -321,7 +318,8 @@ def cache_number_users_with_same_feature(func):
 
         # Make id in order to cache and return
         # result by feature_type and language of user
-        result_id = '{}_{}'.format(feature_name, user_language.get(chat_id))
+        result_id = '{}_{}'.format(feature_name,
+                                   users.find_user(message).get_language())
 
         # It's high time to reevaluate result instead
         # of just looking up in cache if countdown went off, if
@@ -332,7 +330,7 @@ def cache_number_users_with_same_feature(func):
 
         if not when_was_called or high_time or result_id not in result:
             when_was_called = datetime.now()
-            result[result_id] = func(feature_name, device_type, chat_id)
+            result[result_id] = func(feature_name, device_type, message)
             return result[result_id]
         else:
             log.info('Returning cached result of %s',  func.__name__)
@@ -365,7 +363,7 @@ def cache_most_popular_items(func):
     # is key and message for user is a value
     result = {}
 
-    def function_launcher(item_type, chat_id):
+    def function_launcher(item_type, message):
         nonlocal func
         nonlocal result
         nonlocal when_was_called
@@ -374,7 +372,7 @@ def cache_most_popular_items(func):
         # Only top countries can be returned in different languages.
         # For the other types of queries it doesn't mean a thing.
         if item_type == 'country_ru' or item_type == 'country_en':
-            result_id = user_language.get(chat_id) + item_type
+            result_id = users.find_user(message).get_language() + item_type
         else:
             result_id = item_type
 
@@ -385,7 +383,7 @@ def cache_most_popular_items(func):
 
         if not result.get(result_id, None) or not when_was_called or high_time:
             when_was_called = datetime.now()
-            result[result_id] = func(item_type, chat_id)
+            result[result_id] = func(item_type, message)
             return result[result_id]
         else:
             log.debug('Return cached result of %s...', func.__name__)
@@ -437,18 +435,18 @@ def get_address(latitude, longitude, lang):
         return False
 
 
-def get_coordinates_from_exif(data, chat_id):
+def get_coordinates_from_exif(data, message):
     """
     # Convert GPS coordinates from format in which they are stored in
     EXIF of photo to format that accepts Telegram (and Google Maps for example)
 
     :param data: EXIF data extracted from photo
-    :param chat_id: user id
+    :param message: telebot object with info about user and his message
     :return: either floats that represents longitude and latitude or
     string with error message dedicated to user
     """
 
-    current_user_lang = user_language.get(chat_id)
+    current_user_lang = users.find_user(message).get_language()
 
     def idf_tag_to_coordinate(tag):
         # Convert ifdtag from exifread module to decimal degree format
@@ -535,17 +533,19 @@ def check_camera_tags(tags):
 
 
 @cache_most_popular_items
-def get_most_popular_items(item_type, chat_id):
+def get_most_popular_items(item_type, message):
     """
     Get most common cameras/lenses/countries from database and
     make list of them
     :param item_type: string with column name to choose between cameras,
     lenses and countries
-    :param chat_id: id of user derived from telegram object message
+    :param message: telebot object with info about user and his message
     :return: string which is either list of most common
     cameras/lenses/countries or message which states that list is
     empty
     """
+
+    user = users.find_user(message)
 
     def list_to_ordered_str_list(list_of_gadgets):
         # Make Python list to be string like roster with indexes and
@@ -567,19 +567,19 @@ def get_most_popular_items(item_type, chat_id):
     # This query returns item types in order where the first one item
     # has the highest number of occurrences
     # in a given column
-    query = ('SELECT {0} FROM photo_queries_table '
+    query = ('SELECT {0} FROM photo_queries_table2 '
              'GROUP BY {0} '
              'ORDER BY count({0}) '
              'DESC'.format(item_type))
     cursor = db.execute_query(query)
     if not cursor:
         log.error("Can't evaluate a list of the most popular items")
-        return messages[user_language.get(chat_id)]['doesnt work']
+        return messages[user.get_language()]['doesnt work']
     if not cursor.rowcount:
         log.warning('There is nothing in the main database table')
         bot.send_message(chat_id=config.MY_TELEGRAM,
                          text='There is nothing in the main database table')
-        return messages[user_language.get(chat_id)]['no_top']
+        return messages[user.get_language()]['no_top']
 
     popular_items = cursor.fetchall()
     if len(popular_items) > 30:
@@ -591,20 +591,23 @@ def get_most_popular_items(item_type, chat_id):
 
 
 @cache_number_users_with_same_feature
-def get_number_users_by_feature(feature_name, feature_type, chat_id):
+def get_number_users_by_feature(feature_name, feature_type, message):
     """
     Get number of users that have same smartphone, camera, lens or that
     have been to the same country
     :param feature_name: string which is name of a particular feature e.g.
     camera name or country name
     :param feature_type: string which is name of the column in database
-    :param chat_id: integer which is ID of user
+    :param message: telebot object with info about message and its sender
     :return: string which is message to user
     """
     log.debug('Check how many users also have feature: %s...', feature_name)
+
+    user = users.find_user(message)
+    current_user_lang = user.get_language()
     answer = ''
     query = ('SELECT DISTINCT chat_id '
-             'FROM photo_queries_table '
+             'FROM photo_queries_table2 '
              'WHERE {}="{}"'.format(feature_type, feature_name))
     cursor = db.execute_query(query)
     if not cursor or not cursor.rowcount:
@@ -613,13 +616,13 @@ def get_number_users_by_feature(feature_name, feature_type, chat_id):
 
     if feature_type == 'camera_name':
         # asterisks for markdown - to make font bold
-        answer += '*{}*{}.'.format(messages[user_language.get(chat_id)]
+        answer += '*{}*{}.'.format(messages[current_user_lang]
                                    ['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
-        answer += '*{}*{}.'.format(messages[user_language.get(chat_id)]
+        answer += '*{}*{}.'.format(messages[current_user_lang]
                                    ['lens_users'], str(row - 1))
     elif feature_type == 'country_en':
-        answer += '*{}*{}.'.format(messages[user_language.get(chat_id)]
+        answer += '*{}*{}.'.format(messages[current_user_lang]
                                    ['photos_from_country'], str(row - 1))
 
     return answer
@@ -643,33 +646,25 @@ def save_user_query_info(data, message, country=None):
     camera_name = ('NULL' if not camera_name
                    else '{0}{1}{0}'.format('"', camera_name))
     lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
-    chat_id = message.chat.id
-    msg = message.from_user
-    first_name = ('NULL' if not msg.first_name
-                  else '{0}{1}{0}'.format('"', msg.first_name))
-    last_name = ('NULL' if not msg.last_name
-                 else '{0}{1}{0}'.format('"', msg.last_name))
-    username = ('NULL' if not msg.username
-                else '{0}{1}{0}'.format('"', msg.username))
+    user = users.find_user(message)
+
     if not country:
         country_en = country_ru = 'NULL'
     else:
         country_en = '"{}"'.format(country[0])
         country_ru = '"{}"'.format(country[1])
 
-    log.info('Adding user query to photo_queries_table...')
+    log.info("Adding user's query to photo_queries_table2...")
 
-    query = ('INSERT INTO photo_queries_table '
-             '(chat_id, camera_name, lens_name, first_name, last_name, '
-             'username, country_en, country_ru) '
-             'VALUES ({}, {}, {}, {}, {}, {}, '
-             '{}, {})'.format(chat_id, camera_name, lens_name, first_name,
-                              last_name, username, country_en,
-                              country_ru))
+    query = ('INSERT INTO photo_queries_table2 (chat_id, camera_name, '
+             f'lens_name, country_en, country_ru) VALUES ({user.chat_id}, '
+             f'{camera_name}, {lens_name}, {country_en}, {country_ru})')
 
-    db.execute_query(query)
-    db.conn.commit()
-    log.info('User query was successfully added to the database.')
+    if not db.add(query):
+        log.warning("Cannot add user's query into database")
+        return
+
+    log.info("User's query was successfully added to the database.")
     return
 
 
@@ -681,7 +676,7 @@ def read_exif(image, message):
     the same camera/lens.
 
     :param image: actual photo that user sent to bot
-    :param message: object from Telegram that contains user id, name etc
+    :param message: telebot object with info about user and his message
     :return: list with three values. First value called answer is also list
     that contains different information about picture. First value of answer
     is either tuple with coordinates from photo or string message
@@ -694,7 +689,7 @@ def read_exif(image, message):
     function returns is a country where picture was taken.
 
     """
-    chat_id = message.chat.id
+    user = users.find_user(message)
     answer = []
     exif = exifread.process_file(image, details=False)
     if not len(exif.keys()):
@@ -724,13 +719,13 @@ def read_exif(image, message):
     camera, lens = check_camera_tags([camera, lens])
     camera_info = camera, lens
 
-    exif_converter_result = get_coordinates_from_exif(exif, chat_id)
+    exif_converter_result = get_coordinates_from_exif(exif, message)
     # If tuple - there are coordinates, else - message to user t
     # hat there are no coordinates
     if isinstance(exif_converter_result, tuple):
         coordinates = exif_converter_result
         answer.append(coordinates)
-        lang = 'ru' if user_language.get(chat_id) == 'ru-RU' else 'en'
+        lang = 'ru' if user.get_language() == 'ru-RU' else 'en'
         try:
             address, country = get_address(*coordinates, lang)
         except TypeError:
@@ -748,19 +743,19 @@ def read_exif(image, message):
         save_user_query_info(camera_info, message)
 
     others_with_this_cam = get_number_users_by_feature(camera,
-                                                       'camera_name', chat_id)
+                                                       'camera_name', message)
 
     others_with_this_lens = (
-        get_number_users_by_feature(lens, 'lens_name', chat_id)
+        get_number_users_by_feature(lens, 'lens_name', message)
         if lens else None)
 
     others_from_this_country = (
-        get_number_users_by_feature(country[0], 'country_en', chat_id)
+        get_number_users_by_feature(country[0], 'country_en', message)
         if country else None)
 
     # Make user message about camera from exif
     info_about_shot = ''
-    for tag, item in zip(messages[user_language.get(chat_id)]['camera_info'],
+    for tag, item in zip(messages[user.get_language()]['camera_info'],
                          [date_time_str, camera, lens, address]):
         if item:
             info_about_shot += '*{}*: {}\n'.format(tag, item)
@@ -777,17 +772,15 @@ def read_exif(image, message):
 
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
-    chat_id = message.chat.id
-    current_user_lang = user_language.get(chat_id)
-    bot.reply_to(message, messages[current_user_lang]['photo_prcs'])
-    msg = message.from_user
-    log.info('Name: %s Last name: %s Nickname: %s ID: %d sent photo as a '
-             'file.', msg.first_name, msg.last_name, msg.username, msg.id)
+    user = users.find_user(message)
+    bot.reply_to(message, messages[user.get_language()]['photo_prcs'])
+    log.info('%s sent photo as a file.', user)
 
     file_id = bot.get_file(message.document.file_id)
     # Get temporary link to a photo that user has sent to bot
     file_path = file_id.file_path
     # Download photo that got telegram bot from user
+    # todo fix this (we don't use prod anymore)
     if os.path.exists('prod.txt'):
         r = requests.get('https://api.telegram.org/file/bot{0}/{1}'
                          .format(config.TELEGRAM_TOKEN, file_path))
@@ -804,38 +797,34 @@ def handle_image(message):
 
     # Send message to user that there is no EXIF data in his picture
     if not read_exif_result:
-        bot.reply_to(message, messages[current_user_lang]['no_exif'])
+        log.info('The photo does not contain EXIF')
+        bot.reply_to(message, messages[user.get_language()]['no_exif'])
         return
 
     answer, cam_info, country = read_exif_result
 
-    msg = message.from_user
-
     # Send location and info about shot back to user
     if isinstance(answer[0], tuple):
         lat, lon = answer[0]
-        bot.send_location(chat_id, lat, lon, live_period=None)
+        bot.send_location(user.chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[1], parse_mode='Markdown')
 
-        log.info('Sent location and EXIF data back to Name: %s Last name: %s '
-                 'Nickname: %s ID: %d', msg.first_name, msg.last_name,
-                 msg.username, msg.id)
+        log.info('Sent location and EXIF data back to %s', user)
         return
 
     # Sent to user only info about camera because there is no gps
     # coordinates in his photo
     user_msg = '{}\n{}'.format(answer[0], answer[1])
     bot.reply_to(message, user_msg, parse_mode='Markdown')
-    log.info('Sent only EXIF data back to Name: %s Last name: %s '
-             'Nickname: %s ID: %d', msg.first_name, msg.last_name,
-             msg.username, msg.id)
+    log.info('Sent only EXIF data back to %s ', user)
 
 
 if __name__ == '__main__':
     log_files.clean_log_folder(1)
+    users.cache(100)
     # I think you can safely cache several hundred or thousand of
     # user-lang pairs without consuming to much memory, but for development
     # purpose I will set it to some minimum to be sure that
     # calling to DB works properly
-    user_language.cache(10)
+    # user_language.cache(10)
     bot.start_bot()

@@ -3,6 +3,11 @@ Initiating essential modules for photoGPSbot
 """
 
 import socket
+import json
+
+# Load file with messages for user in two languages
+with open('photogpsbot/language_pack.txt', 'r', encoding='utf8') as json_file:
+    messages = json.load(json_file)
 
 # telebot goes as pyTelegramBotAPI in requirements
 from telebot import apihelper
@@ -17,9 +22,8 @@ from photogpsbot.helper import send_last_logs
 from photogpsbot.db_connector import Database
 db = Database()
 
-from photogpsbot.user_language import UserLanguage
-user_language = UserLanguage()
-
+from photogpsbot.users import Users
+users = Users()
 
 if not socket.gethostname() == config.PROD_HOST_NAME:
     log.info('Working through proxy.')
