@@ -2,6 +2,7 @@ import config
 from photogpsbot import bot, log, db, send_last_logs
 
 # todo write description for classes and methods
+# todo update user info like name and whatever if it was changed
 
 
 class User:
