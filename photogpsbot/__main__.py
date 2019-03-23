@@ -11,10 +11,8 @@ interactive menus, to handle user language, to process user images
 # todo check what is wrong with geopy on
 #  last versions (some deprecation warning)
 
-# todo check queries in admin stat menu
-# todo get rid of everything superfluous after if name == main
 # todo rewrite the processing of images
-# todo update dosctrings and comments
+# todo update docstrings and comments
 
 import os
 from io import BytesIO
@@ -819,12 +817,11 @@ def handle_image(message):
     log.info('Sent only EXIF data back to %s ', user)
 
 
-if __name__ == '__main__':
+def main():
     log_files.clean_log_folder(1)
     users.cache(100)
-    # I think you can safely cache several hundred or thousand of
-    # user-lang pairs without consuming to much memory, but for development
-    # purpose I will set it to some minimum to be sure that
-    # calling to DB works properly
-    # user_language.cache(10)
     bot.start_bot()
+
+
+if __name__ == '__main__':
+    main()
