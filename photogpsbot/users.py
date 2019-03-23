@@ -79,9 +79,11 @@ class Users:
         cursor = db.execute_query(query)
         if not cursor:
             log.error("Can't figure out last active users! Check logs")
+            send_last_logs()
             return
         if not cursor.rowcount:
             log.warning('There are no entries in the photo_queries_table2')
+            send_last_logs()
             return
 
         # Make list out of tuple of tuples that is returned by MySQL
@@ -100,9 +102,11 @@ class Users:
         if not cursor:
             log.error("Can't get language preferences for last active "
                       "users from the db")
+            send_last_logs()
             return
         if not cursor.rowcount:
             log.warning('There are no users in the db')
+            send_last_logs()
             return
 
         users = cursor.fetchall()
@@ -160,7 +164,8 @@ class Users:
                  f'VALUES ({user.chat_id}, "{user.first_name}", '
                  f'"{user.nickname}", "{user.last_name}", "{user._lang}")')
         if not db.add(query):
-            log.error("Cannot add user into database")
+            log.error("Cannot add user to the database")
+            send_last_logs()
         else:
             log.info(f"User {user} was successfully added to the users db")
 
@@ -225,25 +230,30 @@ class Users:
                 # user's info
                 log.error('Cannot lookup the user with chat_id %d in database',
                           message.chat.id)
+                send_last_logs()
                 msg = message.from_user
                 user = self.add_new_one(message.chat.id, msg.first_name,
                                         msg.last_name, msg.username,
                                         language='en-US', add_to_db=False)
 
-            elif cursor.rowcount:
+            elif not cursor.rowcount:
                 # This user uses our photoGPSbot for the first time as we
                 # can't find him in the database
+                log.info('Adding totally new user to the system...')
                 msg = message.from_user
                 user = self.add_new_one(message.chat.id, msg.first_name,
                                         msg.last_name, msg.username,
                                         language='en-US')
                 bot.send_message(config.MY_TELEGRAM,
                                  text=f'You have a new user! {user}')
-                log.info('You have a new user! %s', user)
+                log.info('You have a new user! Welcome %s', user)
 
             else:
+                log.debug('User %d has been found in the database',
+                          message.chat.id)
+
                 user_data = cursor.fetchall()[0]
-                user = self.add_new_one(message.chat.id, *user_data)
-                log.debug('User %s has been found in the database', user)
+                user = self.add_new_one(message.chat.id, *user_data,
+                                        add_to_db=False)
 
         return user
