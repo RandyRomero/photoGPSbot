@@ -44,6 +44,7 @@ def get_admin_stat(command):
 
         last_active_users = users.get_last_active_users(100)
         bot_users = ''
+        # Makes a human readable list of last active users
         for usr, index in zip(last_active_users,
                               range(len(last_active_users))):
             user = User(*usr)
@@ -99,12 +100,9 @@ def get_admin_stat(command):
         # once or more (first for the whole time, then today)
         log.info('Evaluating number of users that use bot '
                  'since the first day and today...')
-        query = ('SELECT COUNT(DISTINCT chat_id) '
-                 'FROM photo_queries_table2')
-        cursor = db.execute_query(query)
-        if not cursor:
-            return error_answer
-        answer += 'There are totally {} users.'.format(cursor.fetchone()[0])
+        num_of_users = users.get_total_number()
+        answer += f'There are totally {num_of_users} users.'
+
         query = ('SELECT COUNT(DISTINCT chat_id) '
                  'FROM photo_queries_table2 '
                  'WHERE time > "{}"'.format(today))

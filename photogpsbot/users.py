@@ -76,6 +76,20 @@ class Users:
         self.users = {}
 
     @staticmethod
+    def get_total_number():
+        """
+        Count the total number of users in the database
+        :return: integer which is the total number of users
+        """
+        query = "SELECT COUNT(*) FROM users"
+        cursor = db.execute_query(query)
+        if not cursor:
+            log.error("Can't count the total number of users!")
+            send_last_logs()
+
+        return cursor.fetchone()[0]
+
+    @staticmethod
     def get_last_active_users(limit):
         """
         Get from the database a tuple of users who have been recently using
