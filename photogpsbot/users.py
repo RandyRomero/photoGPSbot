@@ -188,26 +188,27 @@ class Users:
         return user
 
     # todo make separate function find_by_id
-    def find_one(self, message=None, chat_id=None):
 
+    def find_by_id(self, chat_id):
         # Look up user by chat_id - usually when the bot caches users from the
         # datatable of users' queries
-        if chat_id:
-            user = self.users.get(chat_id, None)
-            if not user:
-                query = 'SELECT * FROM users'
-                cursor = db.execute_query(query)
-                if not cursor:
-                    log.error(f'Cannot look up the user with chat id {chat_id}'
-                              ' in the database because of some db error')
-                    return None
-                if not cursor.rowcount:
-                    log.error('There is definitely should be the user with '
-                              f'chat id {chat_id} in the database, but some'
-                              'how his is not there')
-                    return None
+        user = self.users.get(chat_id, None)
+        if not user:
+            query = 'SELECT * FROM users'
+            cursor = db.execute_query(query)
+            if not cursor:
+                log.error(f'Cannot look up the user with chat id {chat_id}'
+                          ' in the database because of some db error')
+                return None
+            if not cursor.rowcount:
+                log.error('There is definitely should be the user with '
+                          f'chat id {chat_id} in the database, but some'
+                          'how his is not there')
+                return None
 
-            return user
+        return user
+
+    def find_one(self, message):
 
         # Look up a user by a Message object which we get together with request
         # from Telegram

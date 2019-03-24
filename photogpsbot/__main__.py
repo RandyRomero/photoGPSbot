@@ -57,7 +57,7 @@ def get_admin_stat(command):
         bot_users = ''
         i = 1
         for chat_id in chat_ids:
-            user = users.find_one(chat_id=chat_id[0])
+            user = users.find_by_id(chat_id[0])
             if not user:
                 continue
             bot_users += f'{i}. {user}\n'
