@@ -1,11 +1,21 @@
+"""
+Module to manage users of bot: store and update information, interact with
+the database, keep tack of and switch language of interface for user
+"""
+
 import config
 from photogpsbot import bot, log, db, send_last_logs
 
 # todo write description for classes and methods
-# todo update user info like name and whatever if it was changed
+# todo make separate method for Users objects to get last active users
+# todo move function from main which evaluates a total number of users
 
 
 class User:
+    """
+    Class that describes one user of this Telegram bot and helps to store basic
+    info about him and his language of choice for interface of the bot
+    """
     def __init__(self, chat_id, first_name, nickname, last_name,
                  language='en-US'):
         self.chat_id = chat_id
@@ -16,8 +26,8 @@ class User:
 
     def set_language(self, lang):
         """
-        Sets opposite language tag of what user had before. Methods
-        adds new language tag in a database and in dictionary
+        Update language of user in the User object and in the database
+        :param lang: string with language tag like "en-US"
         :return: None
         """
         log.debug('Updating info about user %s language '
@@ -34,7 +44,11 @@ class User:
             send_last_logs()
 
     def switch_language(self):
-        # Switch language from Russian to English or conversely
+        """
+        Switch language from Russian to English or conversely
+        :return: string with language tag like "en-US" to be used for
+        rendering menus and messages for user
+        """
         curr_lang = self.language
         new_lang = 'ru-RU' if self.language == 'en-US' else 'en-US'
         log.info('Changing user %s language from %s to %s...', self,
@@ -45,23 +59,30 @@ class User:
         return new_lang
 
     def __repr__(self):
+        """
+        Override the default repr in order to give sensible information about
+        a particular user
+        :return: string with info about a user
+        """
         return (f'{self.first_name} {self.nickname} {self.last_name} '
                 f'({self.chat_id}) preferred language: {self.language}')
 
 
 class Users:
+    """
+    Class for managing users of the bot: find them, add to system,
+    cache them from the database, check whether user changed his info etc
+    """
     def __init__(self):
         self.users = {}
 
     def cache(self, num_users):
         """
-        Method that caches preferred language of last active users from
-        database to a variable
-        :param num_users: number of entries to be cached
-        :return: True if it completed work without errors, False otherwise
+        Caches last active users from database to a dictionary inside object of
+        this class
+        :param num_users: limit of entries to be cached
+        :return: None
         """
-        # todo try to return info about last active users by one query
-        #  instead of two
 
         log.debug("Start caching last active users from the DB...")
 
