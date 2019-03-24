@@ -165,7 +165,7 @@ def get_admin_stat(command):
 @bot.message_handler(commands=['start'])
 def create_main_keyboard(message):
     user = users.find_one(message)
-    current_user_lang = user.get_language()
+    current_user_lang = user.language
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,
                                        resize_keyboard=True)
     markup.row('Русский/English')
@@ -180,7 +180,7 @@ def create_main_keyboard(message):
 @bot.message_handler(content_types=['text'])
 def handle_menu_response(message):
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
-    current_user_lang = users.find_one(message).get_language()
+    current_user_lang = users.find_one(message).language
     user = users.find_one(message)
 
     if message.text == 'Русский/English':
@@ -285,7 +285,7 @@ def admin_menu(call):  # Respond commands from admin menu
 @bot.message_handler(content_types=['photo'])
 def answer_photo_message(message):
     user = users.find_one(message)
-    bot.send_message(user.chat_id, messages[user.get_language()]['as_file'])
+    bot.send_message(user.chat_id, messages[user.language]['as_file'])
     log.info('%s sent photo as a photo.', user)
 
 
@@ -317,7 +317,7 @@ def cache_number_users_with_same_feature(func):
         # Make id in order to cache and return
         # result by feature_type and language of user
         result_id = '{}_{}'.format(feature_name,
-                                   users.find_one(message).get_language())
+                                   users.find_one(message).language)
 
         # It's high time to reevaluate result instead
         # of just looking up in cache if countdown went off, if
@@ -370,7 +370,7 @@ def cache_most_popular_items(func):
         # Only top countries can be returned in different languages.
         # For the other types of queries it doesn't mean a thing.
         if item_type == 'country_ru' or item_type == 'country_en':
-            result_id = users.find_one(message).get_language() + item_type
+            result_id = users.find_one(message).language + item_type
         else:
             result_id = item_type
 
@@ -444,7 +444,7 @@ def get_coordinates_from_exif(data, message):
     string with error message dedicated to user
     """
 
-    current_user_lang = users.find_one(message).get_language()
+    current_user_lang = users.find_one(message).language
 
     def idf_tag_to_coordinate(tag):
         # Convert ifdtag from exifread module to decimal degree format
@@ -572,12 +572,12 @@ def get_most_popular_items(item_type, message):
     cursor = db.execute_query(query)
     if not cursor:
         log.error("Can't evaluate a list of the most popular items")
-        return messages[user.get_language()]['doesnt work']
+        return messages[user.language]['doesnt work']
     if not cursor.rowcount:
         log.warning('There is nothing in the main database table')
         bot.send_message(chat_id=config.MY_TELEGRAM,
                          text='There is nothing in the main database table')
-        return messages[user.get_language()]['no_top']
+        return messages[user.language]['no_top']
 
     popular_items = cursor.fetchall()
     if len(popular_items) > 30:
@@ -602,7 +602,7 @@ def get_number_users_by_feature(feature_name, feature_type, message):
     log.debug('Check how many users also have feature: %s...', feature_name)
 
     user = users.find_one(message)
-    current_user_lang = user.get_language()
+    current_user_lang = user.language
     answer = ''
     query = ('SELECT DISTINCT chat_id '
              'FROM photo_queries_table2 '
@@ -723,7 +723,7 @@ def read_exif(image, message):
     if isinstance(exif_converter_result, tuple):
         coordinates = exif_converter_result
         answer.append(coordinates)
-        lang = 'ru' if user.get_language() == 'ru-RU' else 'en'
+        lang = 'ru' if user.language == 'ru-RU' else 'en'
         try:
             address, country = get_address(*coordinates, lang)
         except TypeError:
@@ -753,7 +753,7 @@ def read_exif(image, message):
 
     # Make user message about camera from exif
     info_about_shot = ''
-    for tag, item in zip(messages[user.get_language()]['camera_info'],
+    for tag, item in zip(messages[user.language]['camera_info'],
                          [date_time_str, camera, lens, address]):
         if item:
             info_about_shot += '*{}*: {}\n'.format(tag, item)
@@ -771,7 +771,7 @@ def read_exif(image, message):
 @bot.message_handler(content_types=['document'])  # receive file
 def handle_image(message):
     user = users.find_one(message)
-    bot.reply_to(message, messages[user.get_language()]['photo_prcs'])
+    bot.reply_to(message, messages[user.language]['photo_prcs'])
     log.info('%s sent photo as a file.', user)
 
     file_id = bot.get_file(message.document.file_id)
@@ -796,7 +796,7 @@ def handle_image(message):
     # Send message to user that there is no EXIF data in his picture
     if not read_exif_result:
         log.info('The photo does not contain EXIF')
-        bot.reply_to(message, messages[user.get_language()]['no_exif'])
+        bot.reply_to(message, messages[user.language]['no_exif'])
         return
 
     answer, cam_info, country = read_exif_result

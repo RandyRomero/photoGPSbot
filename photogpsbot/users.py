@@ -12,7 +12,7 @@ class User:
         self.first_name = first_name
         self.nickname = nickname
         self.last_name = last_name
-        self._lang = language
+        self.language = language
 
     def set_language(self, lang):
         """
@@ -23,23 +23,20 @@ class User:
         log.debug('Updating info about user %s language '
                   'in memory & database...', self)
 
-        self._lang = lang
+        self.language = lang
 
         query = ('UPDATE users '
-                 f'SET language="{self._lang}" '
+                 f'SET language="{self.language}" '
                  f'WHERE chat_id={self.chat_id}')
 
         if not db.add(query):
             log.error("Can't add new language of %d to the database", self)
             send_last_logs()
 
-    def get_language(self):
-        return self._lang
-
     def switch_language(self):
         # Switch language from Russian to English or conversely
-        curr_lang = self._lang
-        new_lang = 'ru-RU' if self._lang == 'en-US' else 'en-US'
+        curr_lang = self.language
+        new_lang = 'ru-RU' if self.language == 'en-US' else 'en-US'
         log.info('Changing user %s language from %s to %s...', self,
                  curr_lang, new_lang)
 
@@ -49,7 +46,7 @@ class User:
 
     def __repr__(self):
         return (f'{self.first_name} {self.nickname} {self.last_name} '
-                f'({self.chat_id}) preferred language: {self.get_language()}')
+                f'({self.chat_id}) preferred language: {self.language}')
 
 
 class Users:
@@ -162,7 +159,7 @@ class Users:
         query = ('INSERT INTO users (chat_id, first_name, nickname, '
                  'last_name, language) '
                  f'VALUES ({user.chat_id}, "{user.first_name}", '
-                 f'"{user.nickname}", "{user.last_name}", "{user._lang}")')
+                 f'"{user.nickname}", "{user.last_name}", "{user.language}")')
         if not db.add(query):
             log.error("Cannot add user to the database")
             send_last_logs()
