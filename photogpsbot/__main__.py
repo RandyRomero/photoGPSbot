@@ -208,6 +208,12 @@ def handle_menu_response(message):
         log.info('List of most popular cameras '
                  'has been returned to %s', user)
 
+        # in order not to check whether user has changed his nickname or
+        # whatever every time his sends any request the bot will just check
+        # it every time a user wants to get a statistic about the most
+        # popular cameras
+        users.compare_and_update(user, message)
+
     elif message.text == messages[current_user_lang]['top_lens']:
         log.info('User %s asked for top lens', user)
         bot.send_message(user.chat_id,
@@ -812,7 +818,7 @@ def handle_image(message):
         lat, lon = answer[0]
         bot.send_location(user.chat_id, lat, lon, live_period=None)
         bot.reply_to(message, text=answer[1], parse_mode='Markdown')
-
+        create_main_keyboard(message)
         log.info('Sent location and EXIF data back to %s', user)
         return
 

@@ -187,26 +187,45 @@ class Users:
             self._add_to_db(user)
         return user
 
-    # todo make separate function find_by_id
+    @staticmethod
+    def compare_and_update(user, message):
+        log.info('Checking whether user have changed his info or not...')
+        msg = message.from_user
+        usr_from_message = User(message.chat.id, msg.first_name, msg.username,
+                                msg.last_name)
 
-    def find_by_id(self, chat_id):
-        # Look up user by chat_id - usually when the bot caches users from the
-        # datatable of users' queries
-        user = self.users.get(chat_id, None)
-        if not user:
-            query = 'SELECT * FROM users'
-            cursor = db.execute_query(query)
-            if not cursor:
-                log.error(f'Cannot look up the user with chat id {chat_id}'
-                          ' in the database because of some db error')
-                return None
-            if not cursor.rowcount:
-                log.error('There is definitely should be the user with '
-                          f'chat id {chat_id} in the database, but some'
-                          'how his is not there')
-                return None
+        if user.chat_id != usr_from_message.chat_id:
+            log.error("Wrong user to compare!")
+            send_last_logs()
+            return
 
-        return user
+        if user.first_name != usr_from_message.first_name:
+            user.first_name = usr_from_message.first_name
+
+        elif user.nickname != usr_from_message.nickname:
+            user.nickname = usr_from_message.nickname
+
+        elif user.last_name != usr_from_message.last_name:
+            user.last_name = usr_from_message.last_name
+
+        else:
+            log.debug("User's info hasn't changed")
+            return
+
+        log.info("User has changed his info")
+        log.debug("Updating user's info in the database...")
+        query = (f'UPDATE users '
+                 f'SET first_name="{user.first_name}", '
+                 f'nickname="{user.nickname}", '
+                 f'last_name="{user.last_name}" '
+                 f'WHERE chat_id={user.chat_id}')
+
+        if not db.add(query):
+            log.error("Could not update info about %s in the database",
+                      user)
+            return
+
+        log.debug("User info has been updated")
 
     def find_one(self, message):
 
