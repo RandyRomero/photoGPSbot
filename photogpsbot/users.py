@@ -6,7 +6,7 @@ from photogpsbot import bot, log, db, send_last_logs
 
 
 class User:
-    def __init__(self, chat_id, first_name, last_name, nickname,
+    def __init__(self, chat_id, first_name, nickname, last_name,
                  language='en-US'):
         self.chat_id = chat_id
         self.first_name = first_name

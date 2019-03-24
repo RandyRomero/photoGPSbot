@@ -24,7 +24,7 @@ import exifread
 import requests
 from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, log_files, db, users, messages
+from photogpsbot import bot, log, log_files, db, User, users, messages
 import config
 
 
@@ -44,24 +44,30 @@ def get_admin_stat(command):
         log.info('Evaluating last active users with date of '
                  'last time when they used bot...')
 
-        query = ('SELECT chat_id '
-                 'FROM photo_queries_table2 '
-                 'GROUP BY chat_id '
-                 'ORDER BY MAX(time) '
+        # From photo_queries_table2 we take chat_id of the last
+        # active users and from 'users' table we take info about these
+        # users by chat_id which is a foreign key
+        query = ('SELECT p.chat_id, u.first_name, u.nickname, u.last_name, '
+                 'u.language '
+                 'FROM photo_queries_table2 p '
+                 'INNER JOIN users u '
+                 'ON p.chat_id = u.chat_id '
+                 'GROUP BY u.chat_id, u.first_name, u.nickname, u.last_name, '
+                 'u.language '
+                 'ORDER BY MAX(time)'
                  'DESC LIMIT 100')
 
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
-        chat_ids = cursor.fetchall()
+
+        last_active_users = cursor.fetchall()
         bot_users = ''
-        i = 1
-        for chat_id in chat_ids:
-            user = users.find_by_id(chat_id[0])
-            if not user:
-                continue
-            bot_users += f'{i}. {user}\n'
-            i += 1
+        for usr, index in zip(last_active_users,
+                              range(len(last_active_users))):
+            user = User(*usr)
+            bot_users += f'{index + 1}. {user}\n'
+
         answer = ('Up to 100 last active users by the time when they sent '
                   'picture last time:\n')
         answer += bot_users
