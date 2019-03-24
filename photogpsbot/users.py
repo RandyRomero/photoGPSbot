@@ -7,7 +7,6 @@ import config
 from photogpsbot import bot, log, db, send_last_logs
 
 # todo write description for classes and methods
-# todo make separate method for Users objects to get last active users
 # todo move function from main which evaluates a total number of users
 
 
@@ -76,63 +75,61 @@ class Users:
     def __init__(self):
         self.users = {}
 
-    def cache(self, num_users):
+    @staticmethod
+    def get_last_active_users(limit):
+        """
+        Get from the database a tuple of users who have been recently using
+        the bot
+        :param limit: integer that specifies how much users to get
+        :return: tuple of tuples with users info
+        """
+        log.info('Evaluating last active users with date of '
+                 'last time when they used bot...')
+
+        # From photo_queries_table2 we take chat_id of the last
+        # active users and from 'users' table we take info about these
+        # users by chat_id which is a foreign key
+        query = ('SELECT p.chat_id, u.first_name, u.nickname, u.last_name, '
+                 'u.language '
+                 'FROM photo_queries_table2 p '
+                 'INNER JOIN users u '
+                 'ON p.chat_id = u.chat_id '
+                 'GROUP BY u.chat_id, u.first_name, u.nickname, u.last_name, '
+                 'u.language '
+                 'ORDER BY MAX(time)'
+                 f'DESC LIMIT {limit}')
+
+        cursor = db.execute_query(query)
+        if not cursor:
+            log.error("Cannot get the last active users because of some "
+                      "problems with the database")
+            send_last_logs()
+            return None
+
+        last_active_users = cursor.fetchall()
+        return last_active_users
+
+    def cache(self, limit):
         """
         Caches last active users from database to a dictionary inside object of
         this class
-        :param num_users: limit of entries to be cached
+        :param limit: limit of entries to be cached
         :return: None
         """
 
         log.debug("Start caching last active users from the DB...")
 
-        # Select id of last active users
-        query = ("SELECT chat_id "
-                 "FROM photo_queries_table2 "
-                 "GROUP BY chat_id "
-                 "ORDER BY MAX(time) "
-                 f"DESC LIMIT {num_users};")
+        last_active_users = self.get_last_active_users(limit)
 
-        log.info('Figure out last active users...')
-        cursor = db.execute_query(query)
-        if not cursor:
-            log.error("Can't figure out last active users! Check logs")
-            send_last_logs()
-            return
-        if not cursor.rowcount:
-            log.warning('There are no entries in the photo_queries_table2')
-            send_last_logs()
+        if not last_active_users:
+            log.error("Cannot cache users")
             return
 
-        # Make list out of tuple of tuples that is returned by MySQL
-        last_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
-
-        log.debug('Getting language preferences for %d '
-                  'last active users from database...', num_users)
-        # Select from db with language preferences of users who
-        # were active recently
-        query = ("SELECT chat_id, first_name, nickname, last_name, "
-                 "language "
-                 "FROM users "
-                 f"WHERE chat_id in {tuple(last_active_users)};")
-
-        cursor = db.execute_query(query)
-        if not cursor:
-            log.error("Can't get language preferences for last active "
-                      "users from the db")
-            send_last_logs()
-            return
-        if not cursor.rowcount:
-            log.warning('There are no users in the db')
-            send_last_logs()
-            return
-
-        users = cursor.fetchall()
-        for items in users:
+        for items in last_active_users:
             # if chat_id of a user is not known to the program
             if items[0] not in self.users:
+                # adding users from database to the "cache"
                 self.users[items[0]] = User(*items)
-                # users.add_new_one(*items, add_to_db=False)
                 log.debug("Caching user: %s", self.users[items[0]])
         log.info('Users have been cached.')
 

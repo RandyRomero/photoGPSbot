@@ -41,27 +41,8 @@ def get_admin_stat(command):
 
     # Last users with date of last time when they used bot
     if command == 'last active users':
-        log.info('Evaluating last active users with date of '
-                 'last time when they used bot...')
 
-        # From photo_queries_table2 we take chat_id of the last
-        # active users and from 'users' table we take info about these
-        # users by chat_id which is a foreign key
-        query = ('SELECT p.chat_id, u.first_name, u.nickname, u.last_name, '
-                 'u.language '
-                 'FROM photo_queries_table2 p '
-                 'INNER JOIN users u '
-                 'ON p.chat_id = u.chat_id '
-                 'GROUP BY u.chat_id, u.first_name, u.nickname, u.last_name, '
-                 'u.language '
-                 'ORDER BY MAX(time)'
-                 'DESC LIMIT 100')
-
-        cursor = db.execute_query(query)
-        if not cursor:
-            return error_answer
-
-        last_active_users = cursor.fetchall()
+        last_active_users = users.get_last_active_users(100)
         bot_users = ''
         for usr, index in zip(last_active_users,
                               range(len(last_active_users))):
