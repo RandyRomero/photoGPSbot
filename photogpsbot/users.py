@@ -7,7 +7,6 @@ import config
 from photogpsbot import bot, log, db, send_last_logs
 
 # todo write description for classes and methods
-# todo move function from main which evaluates a total number of users
 
 
 class User:
@@ -34,13 +33,16 @@ class User:
 
         self.language = lang
 
-        query = ('UPDATE users '
-                 f'SET language="{self.language}" '
-                 f'WHERE chat_id={self.chat_id}')
+        query = ("UPDATE users "
+                 f"SET language='{self.language}' "
+                 f"WHERE chat_id='{self.chat_id}'")
 
         if not db.add(query):
             log.error("Can't add new language of %d to the database", self)
             send_last_logs()
+            return
+
+        log.debug('Language updated.')
 
     def switch_language(self):
         """
@@ -86,6 +88,7 @@ class Users:
         if not cursor:
             log.error("Can't count the total number of users!")
             send_last_logs()
+            return None
 
         return cursor.fetchone()[0]
 
@@ -147,10 +150,11 @@ class Users:
                 log.debug("Caching user: %s", self.users[items[0]])
         log.info('Users have been cached.')
 
-    def clean_cache(self, num_users):
+    def clean_cache(self, limit):
         """
-        Method that remove languages tags from cache for the least active users
-        :param num_users: number of the users that the method should remove
+        Method that remove several User objects from cache - the least 
+        active users
+        :param limit: number of the users that the method should remove
         from cache
         :return: None
         """
@@ -163,7 +167,7 @@ class Users:
                  f'WHERE chat_id in {user_ids} '
                  'GROUP BY chat_id '
                  'ORDER BY MAX(time) '
-                 f'LIMIT {num_users}')
+                 f'LIMIT {limit}')
 
         cursor = db.execute_query(query)
         if not cursor:
@@ -176,22 +180,26 @@ class Users:
         # Make list out of tuple of tuples that is returned by MySQL
         least_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
         log.info('Removing language preferences of %d least '
-                 'active users from memory...', num_users)
+                 'active users from memory...', limit)
         num_deleted_entries = 0
         for entry in least_active_users:
             log.debug('Deleting %s...', entry)
             deleted_entry = self.users.pop(entry, None)
             if deleted_entry:
                 num_deleted_entries += 1
-        log.debug("%d entries with users language preferences "
-                  "were removed from RAM.", num_deleted_entries)
+        log.debug("%d users were removed from cache.", num_deleted_entries)
 
     @staticmethod
     def _add_to_db(user):
-        query = ('INSERT INTO users (chat_id, first_name, nickname, '
-                 'last_name, language) '
-                 f'VALUES ({user.chat_id}, "{user.first_name}", '
-                 f'"{user.nickname}", "{user.last_name}", "{user.language}")')
+        """
+        Adds User object to the database
+        :param user: User object with info about user
+        :return: Non"
+        """
+        query = ("INSERT INTO users (chat_id, first_name, nickname, "
+                 "last_name, language) "
+                 f"VALUES ({user.chat_id}, '{user.first_name}', "
+                 f"'{user.nickname}', '{user.last_name}', '{user.language}')")
         if not db.add(query):
             log.error("Cannot add user to the database")
             send_last_logs()
@@ -246,11 +254,11 @@ class Users:
 
         log.info("User has changed his info")
         log.debug("Updating user's info in the database...")
-        query = (f'UPDATE users '
-                 f'SET first_name="{user.first_name}", '
-                 f'nickname="{user.nickname}", '
-                 f'last_name="{user.last_name}" '
-                 f'WHERE chat_id={user.chat_id}')
+        query = (f"UPDATE users "
+                 f"SET first_name='{user.first_name}', "
+                 f"nickname='{user.nickname}', "
+                 f"last_name='{user.last_name}' "
+                 f"WHERE chat_id={user.chat_id}")
 
         if not db.add(query):
             log.error("Could not update info about %s in the database",

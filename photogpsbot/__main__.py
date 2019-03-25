@@ -77,17 +77,17 @@ def get_admin_stat(command):
     elif command == 'photos today':
         # Show how many photos have been sent since 00:00:00 of today
         log.info('Evaluating number of photos which were sent today.')
-        query = ('SELECT COUNT(chat_id) '
-                 'FROM photo_queries_table2 '
-                 'WHERE time > "{}"'.format(today))
+        query = ("SELECT COUNT(chat_id) "
+                 "FROM photo_queries_table2 "
+                 "WHERE time > '{}'".format(today))
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
         answer += f'{cursor.fetchone()[0]} times users sent photos today.'
-        query = ('SELECT COUNT(chat_id) '
-                 'FROM photo_queries_table2 '
-                 'WHERE time > "{}" '
-                 'AND chat_id !={}'.format(today, config.MY_TELEGRAM))
+        query = ("SELECT COUNT(chat_id) "
+                 "FROM photo_queries_table2 "
+                 "WHERE time > '{}' "
+                 "AND chat_id !={}".format(today, config.MY_TELEGRAM))
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
@@ -96,16 +96,16 @@ def get_admin_stat(command):
         return answer
 
     elif command == 'number of users':
-        # Show number of users who has used bot at least
+        # Show number of users who has used bot at leas"
         # once or more (first for the whole time, then today)
         log.info('Evaluating number of users that use bot '
                  'since the first day and today...')
         num_of_users = users.get_total_number()
         answer += f'There are totally {num_of_users} users.'
 
-        query = ('SELECT COUNT(DISTINCT chat_id) '
-                 'FROM photo_queries_table2 '
-                 'WHERE time > "{}"'.format(today))
+        query = ("SELECT COUNT(DISTINCT chat_id) "
+                 "FROM photo_queries_table2 "
+                 "WHERE time > '{}'".format(today))
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
@@ -123,9 +123,9 @@ def get_admin_stat(command):
             return error_answer
         answer += (f'There are totally {cursor.fetchone()[0]} '
                    f'cameras/smartphones.')
-        query = ('SELECT COUNT(DISTINCT camera_name) '
-                 'FROM photo_queries_table2 '
-                 'WHERE time > "{}"'.format(today))
+        query = ("SELECT COUNT(DISTINCT camera_name) "
+                 "FROM photo_queries_table2 "
+                 "WHERE time > '{}'".format(today))
         cursor = db.execute_query(query)
         if not cursor:
             return error_answer
@@ -460,7 +460,7 @@ def get_coordinates_from_exif(data, message):
         lon_ref = str(data['GPS GPSLongitudeRef'])
         raw_lon = data['GPS GPSLongitude']
     except KeyError:
-        log.info('This picture doesn\'t contain coordinates.')
+        log.info("This picture doesn't contain coordinates.")
         return messages[current_user_lang]['no_gps']
 
     # Return positive or negative longitude/latitude from exifread's ifdtag
@@ -504,9 +504,9 @@ def check_camera_tags(tags):
         if tag:  # If there was this information inside EXIF of the photo
             tag = str(tag).strip()
             log.info('Looking up collation for %s', tag)
-            query = ('SELECT right_tag '
-                     'FROM tag_table '
-                     'WHERE wrong_tag="{}"'.format(tag))
+            query = ("SELECT right_tag "
+                     "FROM tag_table "
+                     "WHERE wrong_tag='{}'".format(tag))
             cursor = db.execute_query(query)
             if not cursor:
                 log.error("Can't check the tag because of the db error")
@@ -595,9 +595,9 @@ def get_number_users_by_feature(feature_name, feature_type, message):
     user = users.find_one(message)
     current_user_lang = user.language
     answer = ''
-    query = ('SELECT DISTINCT chat_id '
-             'FROM photo_queries_table2 '
-             'WHERE {}="{}"'.format(feature_type, feature_name))
+    query = ("SELECT DISTINCT chat_id "
+             "FROM photo_queries_table2 "
+             "WHERE {}='{}'".format(feature_type, feature_name))
     cursor = db.execute_query(query)
     if not cursor or not cursor.rowcount:
         return None
