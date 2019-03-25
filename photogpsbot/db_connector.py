@@ -48,7 +48,7 @@ class Database:
         self.tunnel_opened = True
         log.debug('SSH tunnel has been established.')
 
-    def _connect(self):
+    def connect(self):
         """
         Established connection either to local database or to remote one if
         the script runs not on the same server where database is located
@@ -81,7 +81,7 @@ class Database:
         :return: cursor object
         """
         if not self.conn or not self.conn.open:
-            self._connect()
+            self.connect()
 
         try:
             cursor = self.conn.cursor()
@@ -97,7 +97,7 @@ class Database:
                 log.info(e)
                 # log.debug("Connecting to the MySQL again...")
 
-                self._connect()
+                self.connect()
                 if trials > 3:
                     send_last_logs()
                     return None

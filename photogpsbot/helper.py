@@ -1,6 +1,7 @@
 from photogpsbot import bot, log_files
 import config
 
+# todo try to make this function a method of the bot class
 
 def send_last_logs():
     logfile_list = log_files.get_list()

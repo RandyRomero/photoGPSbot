@@ -22,7 +22,7 @@ from photogpsbot.helper import send_last_logs
 from photogpsbot.db_connector import Database
 db = Database()
 
-from photogpsbot.users import Users
+from photogpsbot.users import User, Users
 users = Users()
 
 if not socket.gethostname() == config.PROD_HOST_NAME:
