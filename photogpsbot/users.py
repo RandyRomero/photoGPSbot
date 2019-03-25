@@ -6,8 +6,6 @@ the database, keep tack of and switch language of interface for user
 import config
 from photogpsbot import bot, log, db, send_last_logs
 
-# todo write description for classes and methods
-
 
 class User:
     """
@@ -179,8 +177,7 @@ class Users:
 
         # Make list out of tuple of tuples that is returned by MySQL
         least_active_users = [chat_id[0] for chat_id in cursor.fetchall()]
-        log.info('Removing language preferences of %d least '
-                 'active users from memory...', limit)
+        log.info('Removing %d least active users from cache...', limit)
         num_deleted_entries = 0
         for entry in least_active_users:
             log.debug('Deleting %s...', entry)
@@ -218,8 +215,8 @@ class Users:
         :param language: preferred language of a Telegram user
         :param add_to_db: whether of not to add user to the database (for
         example, if bot is caching users from the database, there is clearly
-        no point to add them back to the database
-        :return: User object with info about added user
+        no point to add them back to the database)
+        :return: User object with info about the added user
         """
         user = User(chat_id, first_name, nickname, last_name, language)
         self.users[chat_id] = user
@@ -229,6 +226,19 @@ class Users:
 
     @staticmethod
     def compare_and_update(user, message):
+        """
+        This method compare a user object from the bot and his info from
+        the Telegram message to check whether a user has changed his bio
+        or not. If yes, the user object that represents him in the bot will
+        be updated accordingly. Now this function is called only when a user
+        asks the bot for showing the most popular cams
+
+        :param user: user object that represents a Telegram user in this bot
+        :param message: object from Telegram that contains info about user's
+        message and about himself
+        :return: None
+        """
+
         log.info('Checking whether user have changed his info or not...')
         msg = message.from_user
         usr_from_message = User(message.chat.id, msg.first_name, msg.username,
@@ -268,9 +278,15 @@ class Users:
         log.debug("User info has been updated")
 
     def find_one(self, message):
+        """
+        Look up a user by a message which we get together with request
+        from Telegram
+        :param message: object from Telegram that contains info about user's
+        message and about himself
+        :return: user object that represents a Telegram user in this bot
+        """
 
-        # Look up a user by a Message object which we get together with request
-        # from Telegram
+        # look up user in the cache of bot
         user = self.users.get(message.chat.id, None)
 
         if not user:
