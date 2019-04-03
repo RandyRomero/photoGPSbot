@@ -16,7 +16,6 @@ interactive menus, to handle user language, to process user images
 
 import os
 from io import BytesIO
-import traceback
 from datetime import datetime, timedelta
 
 from telebot import types
@@ -25,12 +24,13 @@ import requests
 from geopy.geocoders import Nominatim
 
 from photogpsbot import bot, log, log_files, db, User, users, messages
+from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
 import config
 
 
 def get_admin_stat(command):
     # Function that returns statistics to admin by command
-    error_answer = "Can't execute your command. Check logs for error"
+    error_answer = "Can't execute your command. Check logs"
     answer = 'There is some statistics for you: \n'
 
     # Set to a beginning of the day
@@ -42,7 +42,11 @@ def get_admin_stat(command):
     # Last users with date of last time when they used bot
     if command == 'last active users':
 
-        last_active_users = users.get_last_active_users(100)
+        try:
+            last_active_users = users.get_last_active_users(100)
+        except DatabaseConnectionError:
+            return error_answer
+
         bot_users = ''
         # Makes a human readable list of last active users
         for usr, index in zip(last_active_users,
@@ -60,16 +64,21 @@ def get_admin_stat(command):
         log.info('Evaluating total number of photo queries in database...')
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table2')
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             return error_answer
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table2 '
                  'WHERE chat_id !={}'.format(config.MY_TELEGRAM))
-        cursor = db.execute_query(query)
-        if not cursor:
-            return error_answer
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
+            answer += ("\nCannot calculate number of photos that were send "
+                       "excluding your photos. Check logs")
+            return answer
+
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
         return answer
@@ -80,17 +89,20 @@ def get_admin_stat(command):
         query = ("SELECT COUNT(chat_id) "
                  "FROM photo_queries_table2 "
                  "WHERE time > '{}'".format(today))
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             return error_answer
         answer += f'{cursor.fetchone()[0]} times users sent photos today.'
         query = ("SELECT COUNT(chat_id) "
                  "FROM photo_queries_table2 "
                  "WHERE time > '{}' "
                  "AND chat_id !={}".format(today, config.MY_TELEGRAM))
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             return error_answer
+
         answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
         log.info('Done.')
         return answer
@@ -100,15 +112,23 @@ def get_admin_stat(command):
         # once or more (first for the whole time, then today)
         log.info('Evaluating number of users that use bot '
                  'since the first day and today...')
-        num_of_users = users.get_total_number()
+        try:
+            num_of_users = users.get_total_number()
+        except DatabaseConnectionError:
+            return error_answer
+
         answer += f'There are totally {num_of_users} users.'
 
         query = ("SELECT COUNT(DISTINCT chat_id) "
                  "FROM photo_queries_table2 "
                  "WHERE time > '{}'".format(today))
-        cursor = db.execute_query(query)
-        if not cursor:
-            return error_answer
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
+            answer += ("\nCannot calculate how many user have sent their "
+                       "photos today")
+            return answer
+
         answer += f'\n{cursor.fetchone()[0]} users have sent photos today.'
         log.info('Done.')
         return answer
@@ -118,17 +138,22 @@ def get_admin_stat(command):
         log.info('Evaluating number of cameras and smartphones in database...')
         query = ('SELECT COUNT(DISTINCT camera_name) '
                  'FROM photo_queries_table2')
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             return error_answer
         answer += (f'There are totally {cursor.fetchone()[0]} '
                    f'cameras/smartphones.')
         query = ("SELECT COUNT(DISTINCT camera_name) "
                  "FROM photo_queries_table2 "
                  "WHERE time > '{}'".format(today))
-        cursor = db.execute_query(query)
-        if not cursor:
-            return error_answer
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
+            answer += ("Cannot calculate the number of gadgets that have been "
+                       "used today so far")
+            return answer
+
         answer += (f'\n{cursor.fetchone()[0]} cameras/smartphones '
                    'were used today.')
         log.info('Done.')
@@ -418,9 +443,9 @@ def get_address(latitude, longitude, lang):
             location2_raw = location2.raw
             country_en = location2_raw['address']['country']
         return location.address, (country_en, country_ru)
-    except Exception:
+    except Exception as e:
         log.error('Getting address failed!')
-        log.error(traceback.format_exc())
+        log.error(e)
         return False
 
 
@@ -507,15 +532,16 @@ def check_camera_tags(tags):
             query = ("SELECT right_tag "
                      "FROM tag_table "
                      "WHERE wrong_tag='{}'".format(tag))
-            cursor = db.execute_query(query)
-            if not cursor:
+            try:
+                cursor = db.execute_query(query)
+            except DatabaseConnectionError:
                 log.error("Can't check the tag because of the db error")
                 log.warning("Tag will stay as is.")
-                continue
-            if cursor.rowcount:
-                # Get appropriate tag from the table
-                tag = cursor.fetchone()[0]
-                log.info('Tag after looking up in tag_tables - %s.', tag)
+            else:
+                if cursor.rowcount:
+                    # Get appropriate tag from the table
+                    tag = cursor.fetchone()[0]
+                    log.info('Tag after looking up in tag_tables - %s.', tag)
 
         checked_tags.append(tag)
     return checked_tags
@@ -560,10 +586,13 @@ def get_most_popular_items(item_type, message):
              'GROUP BY {0} '
              'ORDER BY count({0}) '
              'DESC'.format(item_type))
-    cursor = db.execute_query(query)
-    if not cursor:
+    try:
+        cursor = db.execute_query(query)
+    except DatabaseConnectionError:
         log.error("Can't evaluate a list of the most popular items")
         return messages[user.language]['doesnt work']
+
+    # Almost impossible case but still
     if not cursor.rowcount:
         log.warning('There is nothing in the main database table')
         bot.send_message(chat_id=config.MY_TELEGRAM,
@@ -571,12 +600,8 @@ def get_most_popular_items(item_type, message):
         return messages[user.language]['no_top']
 
     popular_items = cursor.fetchall()
-    if len(popular_items) > 30:
-        log.info('Finish evaluating the most popular items')
-        return list_to_ordered_str_list(popular_items[:30])
-    else:
-        log.info('Finish evaluating the most popular items')
-        return list_to_ordered_str_list(popular_items)
+    log.info('Finish evaluating the most popular items')
+    return list_to_ordered_str_list(popular_items[:30])
 
 
 @cache_number_users_with_same_feature
@@ -590,7 +615,8 @@ def get_number_users_by_feature(feature_name, feature_type, message):
     :param message: telebot object with info about message and its sender
     :return: string which is message to user
     """
-    log.debug('Check how many users also have feature: %s...', feature_name)
+    log.debug('Check how many users also have this feature: %s...',
+              feature_name)
 
     user = users.find_one(message)
     current_user_lang = user.language
@@ -598,13 +624,21 @@ def get_number_users_by_feature(feature_name, feature_type, message):
     query = ("SELECT DISTINCT chat_id "
              "FROM photo_queries_table2 "
              "WHERE {}='{}'".format(feature_type, feature_name))
-    cursor = db.execute_query(query)
-    if not cursor or not cursor.rowcount:
+    try:
+        cursor = db.execute_query(query)
+    except DatabaseConnectionError:
+        log.error("Cannot check how many users also have this feature: %s...",
+                  feature_name)
         return None
+
+    if not cursor.rowcount:
+        return None
+
     row = cursor.rowcount
 
     if feature_type == 'camera_name':
         # asterisks for markdown - to make font bold
+        # -1 to exclude the user itself from count
         answer += '*{}*{}.'.format(messages[current_user_lang]
                                    ['camera_users'], str(row-1))
     elif feature_type == 'lens_name':
@@ -649,12 +683,12 @@ def save_user_query_info(data, message, country=None):
              f'lens_name, country_en, country_ru) VALUES ({user.chat_id}, '
              f'{camera_name}, {lens_name}, {country_en}, {country_ru})')
 
-    if not db.add(query):
+    try:
+        db.add(query)
+    except DatabaseError:
         log.warning("Cannot add user's query into database")
-        return
-
-    log.info("User's query was successfully added to the database.")
-    return
+    else:
+        log.info("User's query was successfully added to the database.")
 
 
 def read_exif(image, message):
