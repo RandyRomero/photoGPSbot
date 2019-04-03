@@ -4,7 +4,8 @@ the database, keep tack of and switch language of interface for user
 """
 
 import config
-from photogpsbot import bot, log, db, send_last_logs
+from photogpsbot import bot, log, db
+from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
 
 
 class User:
@@ -35,12 +36,12 @@ class User:
                  f"SET language='{self.language}' "
                  f"WHERE chat_id='{self.chat_id}'")
 
-        if not db.add(query):
-            log.error("Can't add new language of %d to the database", self)
-            send_last_logs()
-            return
-
-        log.debug('Language updated.')
+        try:
+            db.add(query)
+        except DatabaseError:
+            log.error("Can't add new language of %s to the database", self)
+        else:
+            log.debug('Language updated.')
 
     def switch_language(self):
         """
@@ -82,11 +83,11 @@ class Users:
         :return: integer which is the total number of users
         """
         query = "SELECT COUNT(*) FROM users"
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             log.error("Can't count the total number of users!")
-            send_last_logs()
-            return None
+            raise
 
         return cursor.fetchone()[0]
 
@@ -114,12 +115,12 @@ class Users:
                  'ORDER BY MAX(time)'
                  f'DESC LIMIT {limit}')
 
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             log.error("Cannot get the last active users because of some "
                       "problems with the database")
-            send_last_logs()
-            return None
+            raise
 
         last_active_users = cursor.fetchall()
         return last_active_users
@@ -134,10 +135,10 @@ class Users:
 
         log.debug("Start caching last active users from the DB...")
 
-        last_active_users = self.get_last_active_users(limit)
-
-        if not last_active_users:
-            log.error("Cannot cache users")
+        try:
+            last_active_users = self.get_last_active_users(limit)
+        except DatabaseConnectionError:
+            log.error("Cannot cache users!")
             return
 
         for items in last_active_users:
@@ -167,10 +168,12 @@ class Users:
                  'ORDER BY MAX(time) '
                  f'LIMIT {limit}')
 
-        cursor = db.execute_query(query)
-        if not cursor:
+        try:
+            cursor = db.execute_query(query)
+        except DatabaseConnectionError:
             log.error("Can't figure out the least active users...")
             return
+
         if not cursor.rowcount:
             log.warning("There are no users in the db")
             return
@@ -191,15 +194,16 @@ class Users:
         """
         Adds User object to the database
         :param user: User object with info about user
-        :return: Non"
+        :return: None
         """
         query = ("INSERT INTO users (chat_id, first_name, nickname, "
                  "last_name, language) "
                  f"VALUES ({user.chat_id}, '{user.first_name}', "
                  f"'{user.nickname}', '{user.last_name}', '{user.language}')")
-        if not db.add(query):
+        try:
+            db.add(query)
+        except DatabaseError:
             log.error("Cannot add user to the database")
-            send_last_logs()
         else:
             log.info(f"User {user} was successfully added to the users db")
 
@@ -246,7 +250,6 @@ class Users:
 
         if user.chat_id != usr_from_message.chat_id:
             log.error("Wrong user to compare!")
-            send_last_logs()
             return
 
         if user.first_name != usr_from_message.first_name:
@@ -270,12 +273,13 @@ class Users:
                  f"last_name='{user.last_name}' "
                  f"WHERE chat_id={user.chat_id}")
 
-        if not db.add(query):
+        try:
+            db.add(query)
+        except DatabaseError:
             log.error("Could not update info about %s in the database",
                       user)
-            return
-
-        log.debug("User info has been updated")
+        else:
+            log.debug("User's info has been updated")
 
     def find_one(self, message):
         """
@@ -286,47 +290,54 @@ class Users:
         :return: user object that represents a Telegram user in this bot
         """
 
-        # look up user in the cache of bot
+        # look up user in the cache of the bot
         user = self.users.get(message.chat.id, None)
 
-        if not user:
-            log.debug("Looking up the user in the database as it doesn't "
-                      "appear in cache")
-            query = (f'SELECT first_name, nickname, last_name, language '
-                     f'FROM users '
-                     f'WHERE chat_id={message.chat.id}')
+        if user:
+            return user
 
+        # otherwise look up the user in the database
+        log.debug("Looking up the user in the database as it doesn't "
+                  "appear in cache")
+        query = (f'SELECT first_name, nickname, last_name, language '
+                 f'FROM users '
+                 f'WHERE chat_id={message.chat.id}')
+
+        try:
             cursor = db.execute_query(query)
-            if not cursor:
-                # Even if the database in unreachable add user to dictionary
-                # with users otherwise the bot will crash requesting this
-                # user's info
-                log.error('Cannot lookup the user with chat_id %d in database',
-                          message.chat.id)
-                send_last_logs()
-                msg = message.from_user
-                user = self.add_new_one(message.chat.id, msg.first_name,
-                                        msg.last_name, msg.username,
-                                        language='en-US', add_to_db=False)
+        except DatabaseConnectionError:
 
-            elif not cursor.rowcount:
-                # This user uses our photoGPSbot for the first time as we
-                # can't find him in the database
-                log.info('Adding totally new user to the system...')
-                msg = message.from_user
-                user = self.add_new_one(message.chat.id, msg.first_name,
-                                        msg.last_name, msg.username,
-                                        language='en-US')
-                bot.send_message(config.MY_TELEGRAM,
-                                 text=f'You have a new user! {user}')
-                log.info('You have a new user! Welcome %s', user)
+            # Even if the database in unreachable add user to dictionary
+            # with users otherwise the bot will crash requesting this
+            # user's info
+            log.error('Cannot lookup the user with chat_id %d in database',
+                      message.chat.id)
+            msg = message.from_user
+            user = self.add_new_one(message.chat.id, msg.first_name,
+                                    msg.last_name, msg.username,
+                                    language='en-US', add_to_db=False)
+            return user
 
-            else:
-                log.debug('User %d has been found in the database',
-                          message.chat.id)
+        if not cursor.rowcount:
+            # This user uses our photoGPSbot for the first time as we
+            # can't find him in the database
+            log.info('Adding totally new user to the system...')
+            msg = message.from_user
+            user = self.add_new_one(message.chat.id, msg.first_name,
+                                    msg.last_name, msg.username,
+                                    language='en-US')
+            bot.send_message(config.MY_TELEGRAM,
+                             text=f'You have a new user! {user}')
+            log.info('You have a new user! Welcome %s', user)
 
-                user_data = cursor.fetchall()[0]
-                user = self.add_new_one(message.chat.id, *user_data,
-                                        add_to_db=False)
+        # finally if the user wasn't found in the cache of the bot, but was
+        # found in the database
+        else:
+            log.debug('User %d has been found in the database',
+                      message.chat.id)
+
+            user_data = cursor.fetchall()[0]
+            user = self.add_new_one(message.chat.id, *user_data,
+                                    add_to_db=False)
 
         return user

@@ -8,14 +8,21 @@ https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 """
 
 import socket
-import traceback
 
 # goes as mysqlclient in requirements
 import MySQLdb
 import sshtunnel
 
-from photogpsbot import log, send_last_logs
+from photogpsbot import log
 import config
+
+
+class DatabaseError(Exception):
+    pass
+
+
+class DatabaseConnectionError(Exception):
+    pass
 
 
 class Database:
@@ -86,7 +93,6 @@ class Database:
         try:
             cursor = self.conn.cursor()
             cursor.execute(query)
-            return cursor
 
         # try to reconnect if MySQL server has gone away
         except MySQLdb.OperationalError as e:
@@ -99,19 +105,24 @@ class Database:
 
                 self.connect()
                 if trials > 3:
-                    send_last_logs()
-                    return None
+                    log.error(e)
+                    log.warning("Ran out of limit of trials...")
+                    raise DatabaseConnectionError("Cannot connect to the "
+                                                  "database")
 
                 trials += 1
                 # trying to execute query one more time
+                log.warning(e)
+                log.info("Trying execute the query again...")
                 return self.execute_query(query, trials)
             else:
                 log.error(e)
-                send_last_logs()
-        except Exception:
-            error = traceback.format_exc()
-            log.error(error)
-            send_last_logs()
+                raise
+        except Exception as e:
+            log.error(e)
+            raise
+        else:
+            return cursor
 
     def add(self, query):
         """
@@ -120,11 +131,12 @@ class Database:
         :return: boolean - True if the method succeeded and False otherwise
         """
 
-        if self.execute_query(query):
+        try:
+            self.execute_query(query)
             self.conn.commit()
-            return True
-        else:
-            return False
+        except Exception as e:
+            log.errror(e)
+            raise DatabaseError("Cannot add your data to the database!")
 
     def disconnect(self):
         """
