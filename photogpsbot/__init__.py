@@ -32,6 +32,9 @@ db = Database()
 from photogpsbot.users import User, Users
 users = Users()
 
-if not socket.gethostname() == config.PROD_HOST_NAME:
+if socket.gethostname() == config.PROD_HOST_NAME:
+    machine = 'prod'
+else:
     log.info('Working through proxy.')
     apihelper.proxy = {'https': config.PROXY_CONFIG}
+    machine = 'develop'
