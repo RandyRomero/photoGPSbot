@@ -23,7 +23,7 @@ import exifread
 import requests
 from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, log_files, db, User, users, messages
+from photogpsbot import bot, log, log_files, db, User, users, messages, machine
 from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
 import config
 
@@ -462,22 +462,28 @@ def get_coordinates_from_exif(data, message):
 
     current_user_lang = users.find_one(message).language
 
-    def idf_tag_to_coordinate(tag):
-        # Convert ifdtag from exifread module to decimal degree format
-        # of coordinate
-        tag = str(tag).replace('[', '').replace(']', '').split(',')
-        if '/' in tag[2]:
-            # Split string like '4444/5555' and divide first integer
-            # by second one
-            tag[2] = int(tag[2].split('/')[0]) / int(tag[2].split('/')[1])
-        elif '/' not in tag[2]:
-            # Rare case so far - when there is just a number, not ratio
-            tag[2] = int(tag[2])
-        else:
-            log.warning('Can\'t read gps from file!')
-            return False
+    def ifd_tag_to_coordinate(angular_distance, reference):
+        """
+         Convert coordinates from format in which they are typically written
+         in EXIF to decimal degrees - format that Telegram or Google Map
+         understand. Google coordinates, EXIF and decimals degrees if you
+         need to understand what is going on here
 
-        return int(tag[0]) + int(tag[1]) / 60 + tag[2] / 3600
+         :param angular_distance: ifdTag object from the exifread module -
+         it contains a raw coordinate - either longitude or latitude
+         :param reference: denotes relation of a latitude to equatorial plane
+         and a longitude to Greenwich meridian
+          :return: a coordinate in decimal degrees format
+         """
+        ag = angular_distance
+        degrees = ag.values[0].num / ag.values[0].den
+        minutes = (ag.values[1].num / ag.values[1].den) / 60
+        seconds = (ag.values[2].num / ag.values[2].den) / 3600
+
+        if reference in 'WS':
+            return -(degrees + minutes + seconds)
+
+        return degrees + minutes + seconds
 
     try:  # Extract data from EXIF
         lat_ref = str(data['GPS GPSLatitudeRef'])
@@ -489,25 +495,14 @@ def get_coordinates_from_exif(data, message):
         return messages[current_user_lang]['no_gps']
 
     # Return positive or negative longitude/latitude from exifread's ifdtag
-    lat = (-(idf_tag_to_coordinate(raw_lat))
-           if lat_ref == 'S' else idf_tag_to_coordinate(raw_lat))
-    lon = (-(idf_tag_to_coordinate(raw_lon))
-           if lon_ref == 'W' else idf_tag_to_coordinate(raw_lon))
+    try:
+        lat = ifd_tag_to_coordinate(raw_lat, lat_ref)
+        lon = ifd_tag_to_coordinate(raw_lon, lon_ref)
+    except Exception as e:
+        log.error("Cannot convert coordinates")
+        log.error(e)
+        return messages[current_user_lang]['no_gps']
 
-    if lat is False or lon is False:
-        log.error('Cannot read coordinates of this photo.')
-        raw_coordinates = (f'Latitude reference: {lat_ref} '
-                           f'Raw latitude: {raw_lat}. '
-                           f'Longitude reference: {lon_ref}. '
-                           f'Raw longitude: {raw_lon}.')
-        log.info(raw_coordinates)
-        bot.send_message(config.MY_TELEGRAM,
-                         text=('Cannot read these coordinates: ' +
-                               raw_coordinates))
-        return messages[current_user_lang]['bad_gps']
-    elif lat < 1 and lon < 1:
-        log.info('There are zero GPS coordinates in this photo.')
-        return messages[current_user_lang]['bad_gps']
     else:
         return lat, lon
 
@@ -731,7 +726,7 @@ def read_exif(image, message):
         # Means that there is actually no any data of our interest
         return False
 
-    date_time_str = str(date_time) if date_time is not None else None
+    date_time_str = str(date_time) if date_time else None
     # Merge brand and model together and get rid of repetitive words
     camera_string = f'{camera_brand} {camera_model}'
     camera = dedupe_string(camera_string) if camera_string != ' ' else None
@@ -803,14 +798,15 @@ def handle_image(message):
     # Get temporary link to a photo that user has sent to bot
     file_path = file_id.file_path
     # Download photo that got telegram bot from user
-    # todo fix this (we don't use prod anymore)
-    if os.path.exists('prod.txt'):
-        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'
-                         .format(config.TELEGRAM_TOKEN, file_path))
+    link = ("https://api.telegram.org/file/"
+            f"bot{config.TELEGRAM_TOKEN}/{file_path}")
+
+    proxies = {'https': config.PROXY_CONFIG}
+
+    if machine == 'prod':
+        r = requests.get(link)
     else:
-        r = requests.get('https://api.telegram.org/file/bot{0}/{1}'
-                         .format(config.TELEGRAM_TOKEN, file_path),
-                         proxies={'https': config.PROXY_CONFIG})
+        r = requests.get(link, proxies=proxies)
 
     # Get file-like object of user's photo
     user_file = BytesIO(r.content)
