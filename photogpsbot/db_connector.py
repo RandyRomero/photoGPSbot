@@ -151,3 +151,9 @@ class Database:
             log.info('SSH tunnel has been closed.')
         self.tunnel_opened = False
         return True
+
+    def __str__(self):
+        return (f'Instance of a connector to the database. '
+                f'The connection is {"opened" if self.conn else "closed"}. '
+                f'SSH tunnel is {"opened" if self.tunnel_opened else "closed"}'
+                '.')

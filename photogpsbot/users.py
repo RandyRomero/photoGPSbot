@@ -58,14 +58,14 @@ class User:
 
         return new_lang
 
-    def __repr__(self):
-        """
-        Override the default repr in order to give sensible information about
-        a particular user
-        :return: string with info about a user
-        """
+    def __str__(self):
         return (f'{self.first_name} {self.nickname} {self.last_name} '
                 f'({self.chat_id}) preferred language: {self.language}')
+
+    def __repr__(self):
+        return (f'{self.__class__.__name__}(chat_id={self.chat_id}, '
+                f'first_name="{self.first_name}", nickname="{self.nickname}", '
+                f'last_name="{self.last_name}", language="{self.language}")')
 
 
 class Users:
@@ -341,3 +341,7 @@ class Users:
                                     add_to_db=False)
 
         return user
+
+    def __str__(self):
+        return ('Instance of a handler of users. '
+                f'There is {len(self.users)} users in cache right now.')

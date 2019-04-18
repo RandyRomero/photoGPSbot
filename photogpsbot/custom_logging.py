@@ -135,9 +135,7 @@ class LogFiles:
             for file in logfile_list:
                 total_size += file.size
 
-        self.log.info('There is %.2f MB of logs.\n' % (total_size / 1024**2))
-
-        return total_size
+        return total_size / 1024**2
 
     def clean_log_folder(self, max_size):
         """
@@ -156,7 +154,7 @@ class LogFiles:
 
         logfile_list = self.get_list()
         total_size = self._count_total_size()
-        while total_size > max_size * 1024**2:
+        while total_size > max_size:
             # if folder with log files weighs more than max_size in megabytes -
             # recursively remove the oldest one one by one
             logfile_to_delete = logfile_list[1]
@@ -172,6 +170,11 @@ class LogFiles:
             logfile_list.remove(logfile_to_delete)
 
         self.logfile_list = self.get_list()
+
+    def __str__(self):
+        return (f'{self.__class__.__name__} instance. Log folder is '
+                f'"{self.log_folder}". Now it handles {len(self.get_list())} '
+                f'files with total size of {self._count_total_size():.2f} MB.')
 
 
 class TelegramHandler(logging.StreamHandler):

@@ -14,7 +14,6 @@ interactive menus, to handle user language, to process user images
 # todo rewrite the processing of images
 # todo update docstrings and comments
 
-import os
 from io import BytesIO
 from datetime import datetime, timedelta
 
@@ -277,7 +276,7 @@ def admin_menu(call):  # Respond commands from admin menu
         else:
             log.error('Cannot stop bot.')
             bot.send_message(chat_id=config.MY_TELEGRAM,
-                              text='Cannot stop bot.')
+                             text='Cannot stop bot.')
     elif call.data == 'last active':
         bot.send_message(config.MY_TELEGRAM,
                          text=get_admin_stat('last active users'))
