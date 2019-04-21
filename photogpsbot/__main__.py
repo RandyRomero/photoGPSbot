@@ -8,6 +8,8 @@ This specific module contains methods to respond user messages, to make
 interactive menus, to handle user language, to process user images
 """
 
+# todo fix database queries in order to user parameters binding!
+
 # todo check what is wrong with geopy on
 #  last versions (some deprecation warning)
 
@@ -18,13 +20,138 @@ from io import BytesIO
 from datetime import datetime, timedelta
 
 from telebot import types
-import exifread
 import requests
-from geopy.geocoders import Nominatim
 
 from photogpsbot import bot, log, log_files, db, User, users, messages, machine
-from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
+from photogpsbot.process_image import ImageHandler
+from photogpsbot.db_connector import DatabaseConnectionError
 import config
+
+
+class PhotoMessage:
+    def __init__(self, message, user):
+        self.message = message
+        self.user = user
+        self.image_handler = ImageHandler
+
+    @staticmethod
+    def open_photo(message):
+        # Get temporary link to a photo that user sends to the bot
+        file_path = bot.get_file(message.document.file_id).file_path
+
+        # Download photo that got the bot from a user
+        link = ("https://api.telegram.org/file/"
+                f"bot{config.TELEGRAM_TOKEN}/{file_path}")
+
+        if machine == 'prod':
+            r = requests.get(link)
+        else:
+            # use proxy if the bot is running not on production server
+            proxies = {'https': config.PROXY_CONFIG}
+            r = requests.get(link, proxies=proxies)
+
+        # Get file-like object of user's photo
+        return BytesIO(r.content)
+
+    def get_info(self):
+        """
+        Opens file that user sent as a file-like object, get necessary info
+        from it and return it
+
+        :return: instance of ImageData - my dataclass for storing info about
+        an image like user, date, camera name etc
+        """
+        user_photo = self.open_photo(self.message)
+        image = self.image_handler(self.user, user_photo)
+        return image.get_image_info()
+
+    def save_info_to_db(self, image_data):
+        """
+           When user send photo as a file to get information, bot also stores
+           information about this query to the database to keep statistics that
+           can be shown to a user in different ways. It stores time of query,
+           Telegram id of a user, his camera and lens which were used for
+           taking photo, his first and last name, nickname and country where
+           the photo was taken. The bot does not save photos or their
+           coordinates.
+
+           :image_data: an instance of ImageData dataclass with info about
+           the image
+           :return: None
+           """
+        camera_name, lens_name = image_data.camera, image_data.lens
+        camera_name = f'"{camera_name}"' if camera_name else None
+        lens_name = f'"{lens_name}"' if lens_name else None
+
+        if not image_data.country:
+            country_en = country_ru = None
+        else:
+            country_en = f'"{image_data.country["en-US"]}"'
+            country_ru = f'"{image_data.country["ru-RU"]}"'
+
+        log.info('Adding user query to photo_queries_table...')
+
+        query = ('INSERT INTO photo_queries_table '
+                 '(chat_id, camera_name, lens_name, country_en, country_ru) '
+                 'VALUES (%s, %s, %s, %s, %s)')
+
+        parameters = (self.user.chat_id, camera_name, lens_name, country_en,
+                      country_ru)
+
+        log.debug(query)
+        db.execute_query(query, parameters)
+        db.conn.commit()
+        log.info('User query was successfully added to the database.')
+
+    @staticmethod
+    def find_num_users_with_same_feature(image_data):
+        same_feature = []
+
+        feature_types = ('camera_name', 'lens_name', 'country')
+        features = (image_data.camera, image_data.lens, image_data.lens)
+
+        for feature_name, feature in zip(feature_types, features):
+            answer = get_number_users_by_feature(feature, feature_name)
+            same_feature.append(answer)
+
+        return same_feature
+
+    def prepare_answer(self):
+        """
+        Process an image that user sent, get info from it, save data to the
+        database, make an answer to be sent via Telegram
+        :return:
+        """
+
+        # Get instance of the dataclass ImageData with info about the image
+        image_data = self.get_info()
+        # Save some general info about the user's query to the database
+        self.save_info_to_db(image_data)
+
+        answer = ''
+        coordinates = image_data.latitude, image_data.longitude
+        if not coordinates[0]:
+            answer += messages[self.user.language]["no_gps"]
+
+        answ_template = messages[self.user.language]["camera_info"]
+        basic_data = (image_data.date_time, image_data.camera, image_data.lens,
+                      image_data.address)
+
+        # Concatenate templates in language that user prefer with information
+        # from the photo, for example: f'{"Camera brand"}:{"Canon 60D"}'
+        for arg in zip(answ_template, basic_data):
+            if basic_data:
+                answer += f'*{arg[0]}*: {arg[1]}\n'
+
+        lang = self.user.language
+        lang_templates = messages[lang]["users with the same feature"].values()
+        ppl_wth_same_featrs = self.find_num_users_with_same_feature(image_data)
+
+        for template, feature in zip(lang_templates, ppl_wth_same_featrs):
+            if feature:
+                answer += f'{template}: {feature}\n'
+
+        return coordinates, answer
 
 
 def get_admin_stat(command):
@@ -304,15 +431,6 @@ def answer_photo_message(message):
     log.info('%s sent photo as a photo.', user)
 
 
-def dedupe_string(string):
-    splitted_string = string.split(' ')
-    deduped_string = ''
-    for x in splitted_string:
-        if x not in deduped_string:
-            deduped_string += x + ' '
-    return deduped_string.rstrip()
-
-
 def cache_number_users_with_same_feature(func):
     # Closure to cache previous results of given
     # function so to not call database to much
@@ -323,16 +441,10 @@ def cache_number_users_with_same_feature(func):
     when_was_called = None
     result = {}
 
-    def func_launcher(feature_name, device_type, message):
-        nonlocal func
+    def func_launcher(feature, feature_type):
         nonlocal result
         nonlocal when_was_called
         cache_time = 5
-
-        # Make id in order to cache and return
-        # result by feature_type and language of user
-        result_id = '{}_{}'.format(feature_name,
-                                   users.find_one(message).language)
 
         # It's high time to reevaluate result instead
         # of just looking up in cache if countdown went off, if
@@ -341,17 +453,18 @@ def cache_number_users_with_same_feature(func):
         high_time = (when_was_called + timedelta(minutes=cache_time) <
                      datetime.now() if when_was_called else True)
 
-        if not when_was_called or high_time or result_id not in result:
+        if not when_was_called or high_time or feature not in result:
             when_was_called = datetime.now()
-            result[result_id] = func(feature_name, device_type, message)
-            return result[result_id]
+            num_of_users = func(feature, feature_type)
+            result[feature] = num_of_users
+            return num_of_users
         else:
             log.info('Returning cached result of %s',  func.__name__)
             time_left = (when_was_called + timedelta(minutes=cache_time) -
                          datetime.now())
             log.debug('Time to to reevaluate result of %s is %s',
                       func.__name__, str(time_left)[:-7])
-            return result[result_id]
+            return result[feature]
 
     return func_launcher
 
@@ -407,138 +520,6 @@ def cache_most_popular_items(func):
             return result[result_id]
 
     return function_launcher
-
-
-def get_address(latitude, longitude, lang):
-
-    """
-     # Get address as a string by coordinates from photo that user sent to bot
-    :param latitude:
-    :param longitude:
-    :param lang: preferred user language
-    :return: address as a string where photo was taken; name of
-    country in English and Russian to keep statistics
-    of the most popular countries among users of the bot
-    """
-
-    coordinates = "{}, {}".format(latitude, longitude)
-    log.debug('Getting address from coordinates %s...', coordinates)
-    geolocator = Nominatim()
-
-    try:
-        location = geolocator.reverse(coordinates, language=lang)
-
-        # Get name of the country in English and Russian language
-        if lang == 'en':
-            country_en = location.raw['address']['country']
-            second_lang = 'ru'
-            location2 = geolocator.reverse(coordinates, language=second_lang)
-            location2_raw = location2.raw
-            country_ru = location2_raw['address']['country']
-        else:
-            country_ru = location.raw['address']['country']
-            second_lang = 'en'
-            location2 = geolocator.reverse(coordinates, language=second_lang)
-            location2_raw = location2.raw
-            country_en = location2_raw['address']['country']
-        return location.address, (country_en, country_ru)
-    except Exception as e:
-        log.error('Getting address failed!')
-        log.error(e)
-        return False
-
-
-def get_coordinates_from_exif(data, message):
-    """
-    # Convert GPS coordinates from format in which they are stored in
-    EXIF of photo to format that accepts Telegram (and Google Maps for example)
-
-    :param data: EXIF data extracted from photo
-    :param message: telebot object with info about user and his message
-    :return: either floats that represents longitude and latitude or
-    string with error message dedicated to user
-    """
-
-    current_user_lang = users.find_one(message).language
-
-    def ifd_tag_to_coordinate(angular_distance, reference):
-        """
-         Convert coordinates from format in which they are typically written
-         in EXIF to decimal degrees - format that Telegram or Google Map
-         understand. Google coordinates, EXIF and decimals degrees if you
-         need to understand what is going on here
-
-         :param angular_distance: ifdTag object from the exifread module -
-         it contains a raw coordinate - either longitude or latitude
-         :param reference: denotes relation of a latitude to equatorial plane
-         and a longitude to Greenwich meridian
-          :return: a coordinate in decimal degrees format
-         """
-        ag = angular_distance
-        degrees = ag.values[0].num / ag.values[0].den
-        minutes = (ag.values[1].num / ag.values[1].den) / 60
-        seconds = (ag.values[2].num / ag.values[2].den) / 3600
-
-        if reference in 'WS':
-            return -(degrees + minutes + seconds)
-
-        return degrees + minutes + seconds
-
-    try:  # Extract data from EXIF
-        lat_ref = str(data['GPS GPSLatitudeRef'])
-        raw_lat = data['GPS GPSLatitude']
-        lon_ref = str(data['GPS GPSLongitudeRef'])
-        raw_lon = data['GPS GPSLongitude']
-    except KeyError:
-        log.info("This picture doesn't contain coordinates.")
-        return messages[current_user_lang]['no_gps']
-
-    # Return positive or negative longitude/latitude from exifread's ifdtag
-    try:
-        lat = ifd_tag_to_coordinate(raw_lat, lat_ref)
-        lon = ifd_tag_to_coordinate(raw_lon, lon_ref)
-    except Exception as e:
-        log.error("Cannot convert coordinates")
-        log.error(e)
-        return messages[current_user_lang]['no_gps']
-
-    else:
-        return lat, lon
-
-
-def check_camera_tags(tags):
-    """
-    Function that convert stupid code name of a smartphone or camera
-    from EXIF to meaningful one by looking a collation in a special MySQL table
-    For example instead of just Nikon there can be NIKON CORPORATION in EXIF
-
-    :param tags: name of a camera and lens from EXIF
-    :return: list with one or two strings which are name of
-    camera and/or lens. If there is not better name for the gadget
-    in database, function just returns name how it is
-    """
-    checked_tags = []
-
-    for tag in tags:
-        if tag:  # If there was this information inside EXIF of the photo
-            tag = str(tag).strip()
-            log.info('Looking up collation for %s', tag)
-            query = ("SELECT right_tag "
-                     "FROM tag_table "
-                     "WHERE wrong_tag='{}'".format(tag))
-            try:
-                cursor = db.execute_query(query)
-            except DatabaseConnectionError:
-                log.error("Can't check the tag because of the db error")
-                log.warning("Tag will stay as is.")
-            else:
-                if cursor.rowcount:
-                    # Get appropriate tag from the table
-                    tag = cursor.fetchone()[0]
-                    log.info('Tag after looking up in tag_tables - %s.', tag)
-
-        checked_tags.append(tag)
-    return checked_tags
 
 
 @cache_most_popular_items
@@ -599,242 +580,54 @@ def get_most_popular_items(item_type, message):
 
 
 @cache_number_users_with_same_feature
-def get_number_users_by_feature(feature_name, feature_type, message):
+def get_number_users_by_feature(feature, feature_type):
     """
     Get number of users that have same smartphone, camera, lens or that
     have been to the same country
-    :param feature_name: string which is name of a particular feature e.g.
+    :param feature: string which is name of a particular feature e.g.
     camera name or country name
     :param feature_type: string which is name of the column in database
     :param message: telebot object with info about message and its sender
     :return: string which is message to user
     """
     log.debug('Check how many users also have this feature: %s...',
-              feature_name)
+              feature)
 
-    user = users.find_one(message)
-    current_user_lang = user.language
-    answer = ''
     query = ("SELECT DISTINCT chat_id "
              "FROM photo_queries_table2 "
-             "WHERE {}='{}'".format(feature_type, feature_name))
+             "WHERE {}='{}'".format(feature_type, feature))
     try:
         cursor = db.execute_query(query)
     except DatabaseConnectionError:
         log.error("Cannot check how many users also have this feature: %s...",
-                  feature_name)
+                  feature)
         return None
 
     if not cursor.rowcount:
         return None
 
-    row = cursor.rowcount
-
-    if feature_type == 'camera_name':
-        # asterisks for markdown - to make font bold
-        # -1 to exclude the user itself from count
-        answer += '*{}*{}.'.format(messages[current_user_lang]
-                                   ['camera_users'], str(row-1))
-    elif feature_type == 'lens_name':
-        answer += '*{}*{}.'.format(messages[current_user_lang]
-                                   ['lens_users'], str(row - 1))
-    elif feature_type == 'country_en':
-        answer += '*{}*{}.'.format(messages[current_user_lang]
-                                   ['photos_from_country'], str(row - 1))
-
-    return answer
-
-
-def save_user_query_info(data, message, country=None):
-    """
-    When user send photo as a file to get information, bot also stores
-    information about this query in database to keep statistics that can be
-    shown to user in different ways. It stores time of query, telegram id
-    of a user, his camera and lens which were used for taking photo, his
-    first and last name, nickname and country where the photo was taken
-
-    :param data: list with name of camera and lens (if any)
-    :param message: Telegram object "message" that contains info about user
-    and such
-    :param country: country where photo was taken
-    :return: None
-    """
-    camera_name, lens_name = data
-    camera_name = ('NULL' if not camera_name
-                   else '{0}{1}{0}'.format('"', camera_name))
-    lens_name = 'NULL' if not lens_name else '{0}{1}{0}'.format('"', lens_name)
-    user = users.find_one(message)
-
-    if not country:
-        country_en = country_ru = 'NULL'
-    else:
-        country_en = '"{}"'.format(country[0])
-        country_ru = '"{}"'.format(country[1])
-
-    log.info("Adding user's query to photo_queries_table2...")
-
-    query = ('INSERT INTO photo_queries_table2 (chat_id, camera_name, '
-             f'lens_name, country_en, country_ru) VALUES ({user.chat_id}, '
-             f'{camera_name}, {lens_name}, {country_en}, {country_ru})')
-
-    try:
-        db.add(query)
-    except DatabaseError:
-        log.warning("Cannot add user's query into database")
-    else:
-        log.info("User's query was successfully added to the database.")
-
-
-def read_exif(image, message):
-    """
-    Get various info about photo that user sent: time when picture was taken,
-    location as longitude and latitude, post address, type of
-    camera/smartphone and lens, how many people have
-    the same camera/lens.
-
-    :param image: actual photo that user sent to bot
-    :param message: telebot object with info about user and his message
-    :return: list with three values. First value called answer is also list
-    that contains different information about picture. First value of answer
-    is either tuple with coordinates from photo or string message
-    that photo doesn't contain coordinates. Second value of answer is string
-    with photo details: time, camera, lens from exif and, if any, messages
-    how many other bot users have the same camera/lens.
-    Second value in list that this function returns is camera info, which is
-    list with one or two items: first is name of the camera/smartphone,
-    second, if exists, name of the lens. Third  value in list that this
-    function returns is a country where picture was taken.
-
-    """
-    user = users.find_one(message)
-    answer = []
-    exif = exifread.process_file(image, details=False)
-    if not len(exif.keys()):
-        log.info('This picture doesn\'t contain EXIF.')
-        return False
-
-    # Get info about camera ang lend from EXIF
-    date_time = exif.get('EXIF DateTimeOriginal', None)
-    camera_brand = str(exif.get('Image Make', ''))
-    camera_model = str(exif.get('Image Model', ''))
-    lens_brand = str(exif.get('EXIF LensMake', ''))
-    lens_model = str(exif.get('EXIF LensModel', ''))
-
-    if not any([date_time, camera_brand, camera_model, lens_brand,
-                lens_model]):
-        # Means that there is actually no any data of our interest
-        return False
-
-    date_time_str = str(date_time) if date_time else None
-    # Merge brand and model together and get rid of repetitive words
-    camera_string = f'{camera_brand} {camera_model}'
-    camera = dedupe_string(camera_string) if camera_string != ' ' else None
-    lens_string = f'{lens_brand} {lens_model}'
-    lens = dedupe_string(lens_string) if lens_string != ' ' else None
-
-    # Check if there is more appropriate name for camera/lens
-    camera, lens = check_camera_tags([camera, lens])
-    camera_info = camera, lens
-
-    exif_converter_result = get_coordinates_from_exif(exif, message)
-    # If tuple - there are coordinates, else - message to user t
-    # hat there are no coordinates
-    if isinstance(exif_converter_result, tuple):
-        coordinates = exif_converter_result
-        answer.append(coordinates)
-        lang = 'ru' if user.language == 'ru-RU' else 'en'
-        try:
-            address, country = get_address(*coordinates, lang)
-        except TypeError:
-            address, country = '', None
-    else:
-        # Add user message that photo doesn't have info about location or
-        # it can't be read
-        address, country = '', None
-        user_msg = exif_converter_result
-        answer.append(user_msg)
-
-    if country:
-        save_user_query_info(camera_info, message, country)
-    else:
-        save_user_query_info(camera_info, message)
-
-    others_with_this_cam = get_number_users_by_feature(camera,
-                                                       'camera_name', message)
-
-    others_with_this_lens = (
-        get_number_users_by_feature(lens, 'lens_name', message)
-        if lens else None)
-
-    others_from_this_country = (
-        get_number_users_by_feature(country[0], 'country_en', message)
-        if country else None)
-
-    # Make user message about camera from exif
-    info_about_shot = ''
-    for tag, item in zip(messages[user.language]['camera_info'],
-                         [date_time_str, camera, lens, address]):
-        if item:
-            info_about_shot += '*{}*: {}\n'.format(tag, item)
-
-    info_about_shot += others_with_this_cam if others_with_this_cam else ''
-    info_about_shot += ('\n' + others_with_this_lens
-                        if others_with_this_lens else '')
-    info_about_shot += ('\n' + others_from_this_country
-                        if others_from_this_country else '')
-    answer.append(info_about_shot)
-
-    return [answer, camera_info, country]
+    return cursor.rowcount - 1
 
 
 @bot.message_handler(content_types=['document'])  # receive file
-def handle_image(message):
+def handle_message_with_image(message):
+
     user = users.find_one(message)
+    # Sending a message to a user that his photo is being processed
     bot.reply_to(message, messages[user.language]['photo_prcs'])
     log.info('%s sent photo as a file.', user)
 
-    file_id = bot.get_file(message.document.file_id)
-    # Get temporary link to a photo that user has sent to bot
-    file_path = file_id.file_path
-    # Download photo that got telegram bot from user
-    link = ("https://api.telegram.org/file/"
-            f"bot{config.TELEGRAM_TOKEN}/{file_path}")
+    photo_message = PhotoMessage(message, user)
+    answer = photo_message.prepare_answer()
 
-    proxies = {'https': config.PROXY_CONFIG}
-
-    if machine == 'prod':
-        r = requests.get(link)
+    # if longitude is in the answer
+    if answer[0][0]:
+        lon = answer[0][0]
+        lat = answer[0][1]
+        bot.send_location(user.chat_id, lon, lat, live_period=None)
+        bot.reply_to(message, answer[1], parse_mode='Markdown')
     else:
-        r = requests.get(link, proxies=proxies)
-
-    # Get file-like object of user's photo
-    user_file = BytesIO(r.content)
-
-    # Read data from photo and prepare answer for user with location and etc.
-    read_exif_result = read_exif(user_file, message)
-
-    # Send message to user that there is no EXIF data in his picture
-    if not read_exif_result:
-        log.info('The photo does not contain EXIF')
-        bot.reply_to(message, messages[user.language]['no_exif'])
-        return
-
-    answer, cam_info, country = read_exif_result
-
-    # Send location and info about shot back to user
-    if isinstance(answer[0], tuple):
-        lat, lon = answer[0]
-        bot.send_location(user.chat_id, lat, lon, live_period=None)
-        bot.reply_to(message, text=answer[1], parse_mode='Markdown')
-        create_main_keyboard(message)
-        log.info('Sent location and EXIF data back to %s', user)
-        return
-
-    # Sent to user only info about camera because there is no gps
-    # coordinates in his photo
-    user_msg = '{}\n{}'.format(answer[0], answer[1])
-    bot.reply_to(message, user_msg, parse_mode='Markdown')
-    log.info('Sent only EXIF data back to %s ', user)
+        bot.reply_to(message, answer, parse_mode='Markdown')
 
 
 def main():

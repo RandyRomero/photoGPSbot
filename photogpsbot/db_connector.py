@@ -79,7 +79,7 @@ class Database:
                                     charset='utf8')
         log.info('Connected to the database.')
 
-    def execute_query(self, query, trials=0):
+    def execute_query(self, query, parameters=None, trials=0):
         """
         Executes a given query
         :param query: query to execute
@@ -92,7 +92,7 @@ class Database:
 
         try:
             cursor = self.conn.cursor()
-            cursor.execute(query)
+            cursor.execute(query, parameters)
 
         # try to reconnect if MySQL server has gone away
         except MySQLdb.OperationalError as e:
@@ -114,7 +114,7 @@ class Database:
                 # trying to execute query one more time
                 log.warning(e)
                 log.info("Trying execute the query again...")
-                return self.execute_query(query, trials)
+                return self.execute_query(query, parameters, trials)
             else:
                 log.error(e)
                 raise

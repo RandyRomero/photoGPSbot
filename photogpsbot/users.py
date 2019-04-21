@@ -7,6 +7,7 @@ import config
 from photogpsbot import bot, log, db
 from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
 
+from telebot.types import Message
 
 class User:
     """
@@ -281,7 +282,7 @@ class Users:
         else:
             log.debug("User's info has been updated")
 
-    def find_one(self, message):
+    def find_one(self, message: Message) -> User:
         """
         Look up a user by a message which we get together with request
         from Telegram

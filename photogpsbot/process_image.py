@@ -45,8 +45,8 @@ class ImageData:
     lens: str = None
     address: str = None
     country: Dict[str, str] = None
-    longitude: float = None
     latitude: float = None
+    longitude: float = None
 
 
 @dataclass
@@ -73,7 +73,8 @@ class ImageHandler:
         self.file = file
         self.raw_data = None
 
-    def _get_raw_data(self, file):
+    @staticmethod
+    def _get_raw_data(file):
         """
         Get name of the camera and lens, the date when the photo was taken
         and raw coordinates (which later will be converted)
@@ -111,11 +112,11 @@ class ImageHandler:
         except KeyError:
             log.info("This picture doesn't contain coordinates.")
             # returning info about the photo without coordinates
-            return (self.user, date_time, camera_brand, camera_model,
+            return (date_time, camera_brand, camera_model,
                     lens_brand, lens_model)
         else:
             # returning info about the photo with its coordinates
-            return (self.user, date_time, camera_brand, camera_model,
+            return (date_time, camera_brand, camera_model,
                     lens_brand, lens_model, latitude_reference, raw_latitude,
                     longitude_reference, raw_longitude)
 
@@ -207,10 +208,10 @@ class ImageHandler:
         # Return positive or negative longitude/latitude from exifread's ifdtag
 
         try:
-            latitude = self._get_dd_coordinate(raw_data.latitude_reference,
-                                               raw_data.raw_latitude)
-            longitude = self._get_dd_coordinate(raw_data.longitude_reference,
-                                                raw_data.raw_longitude)
+            latitude = self._get_dd_coordinate(raw_data.raw_latitude,
+                                               raw_data.latitude_reference)
+            longitude = self._get_dd_coordinate(raw_data.raw_longitude,
+                                                raw_data.longitude_reference)
 
         except Exception as e:
             # todo also find out the error in case there is no coordinates in
@@ -227,7 +228,7 @@ class ImageHandler:
             raise InvalidCoordinates
 
         else:
-            return longitude, latitude
+            return latitude, longitude
 
     @staticmethod
     def _get_address(latitude, longitude):
@@ -237,7 +238,6 @@ class ImageHandler:
          to bot
         :param latitude:
         :param longitude:
-        :param lang: preferred user language
         :return: address as a string where photo was taken; name of
         country in English and Russian to keep statistics
         of the most popular countries among users of the bot
@@ -245,7 +245,7 @@ class ImageHandler:
 
         address = {}
         country = {}
-        coordinates = "{}, {}".format(latitude, longitude)
+        coordinates = f"{latitude}, {longitude}"
         log.debug('Getting address from coordinates %s...', coordinates)
         geolocator = Nominatim()
 
@@ -263,7 +263,6 @@ class ImageHandler:
         except Exception as e:
             log.error('Getting address has failed!')
             log.error(e)
-            bot.send_last_logs()
             raise
 
     def _convert_data(self, raw_data):
@@ -280,24 +279,24 @@ class ImageHandler:
         camera, lens = self._check_camera_tags([camera, lens])
 
         try:
-            longitude, latitude = self._convert_coordinates(raw_data)
+            latitude, longitude = self._convert_coordinates(raw_data)
         except (InvalidCoordinates, NoCoordinates):
-            address = country = longitude = latitude = None
+            address = country = latitude = longitude = None
         else:
             try:
-                address, country = self._get_address(longitude, latitude)
+                address, country = self._get_address(latitude, longitude)
             except Exception as e:
                 log.warning(e)
                 address = country = None
 
-        return date_time, camera, lens, address, country, longitude, latitude
+        return date_time, camera, lens, address, country, latitude, longitude
 
     def get_image_info(self):
         """
         Read data from photo and prepare answer for user
         with location and etc.
         """
-        raw_data = RawImageData(*self._get_raw_data(self.file))
-        image_data = ImageData(*self._convert_data(raw_data))
+        raw_data = RawImageData(self.user, *self._get_raw_data(self.file))
+        image_data = ImageData(self.user, *self._convert_data(raw_data))
 
         return image_data
