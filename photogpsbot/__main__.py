@@ -135,12 +135,12 @@ class PhotoMessage:
 
         answ_template = messages[self.user.language]["camera_info"]
         basic_data = (image_data.date_time, image_data.camera, image_data.lens,
-                      image_data.address)
+                      image_data.address[self.user.language])
 
         # Concatenate templates in language that user prefer with information
         # from the photo, for example: f'{"Camera brand"}:{"Canon 60D"}'
         for arg in zip(answ_template, basic_data):
-            if basic_data:
+            if arg[1]:
                 answer += f'*{arg[0]}*: {arg[1]}\n'
 
         lang = self.user.language
