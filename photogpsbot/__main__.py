@@ -98,7 +98,6 @@ class PhotoMessage:
         parameters = (self.user.chat_id, camera_name, lens_name, country_en,
                       country_ru)
 
-        log.debug(query)
         db.execute_query(query, parameters)
         db.conn.commit()
         log.info('User query was successfully added to the database.')
@@ -107,10 +106,13 @@ class PhotoMessage:
     def find_num_users_with_same_feature(image_data):
         same_feature = []
 
-        feature_types = ('camera_name', 'lens_name', 'country')
-        features = (image_data.camera, image_data.lens, image_data.lens)
+        feature_types = ('camera_name', 'lens_name', 'country_en')
+        features = (image_data.camera, image_data.lens, image_data.country['en-US'])
 
         for feature_name, feature in zip(feature_types, features):
+            if not feature:
+                same_feature.append(0)
+                continue
             answer = get_number_users_by_feature(feature, feature_name)
             same_feature.append(answer)
 
@@ -146,10 +148,9 @@ class PhotoMessage:
         lang = self.user.language
         lang_templates = messages[lang]["users with the same feature"].values()
         ppl_wth_same_featrs = self.find_num_users_with_same_feature(image_data)
-
         for template, feature in zip(lang_templates, ppl_wth_same_featrs):
             if feature:
-                answer += f'{template}: {feature}\n'
+                answer += f'{template} {feature}\n'
 
         return coordinates, answer
 
@@ -604,8 +605,10 @@ def get_number_users_by_feature(feature, feature_type):
         return None
 
     if not cursor.rowcount:
+        log.debug('There were no users with %s...', feature)
         return None
 
+    log.debug('There is %d users with %s', cursor.rowcount, feature)
     return cursor.rowcount - 1
 
 
