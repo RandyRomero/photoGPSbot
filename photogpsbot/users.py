@@ -34,11 +34,12 @@ class User:
         self.language = lang
 
         query = ("UPDATE users "
-                 f"SET language='{self.language}' "
-                 f"WHERE chat_id='{self.chat_id}'")
+                 f"SET language=%s "
+                 f"WHERE chat_id=%s")
 
+        parameters = self.language, self.chat_id
         try:
-            db.add(query)
+            db.add(query, parameters)
         except DatabaseError:
             log.error("Can't add new language of %s to the database", self)
         else:
@@ -114,10 +115,12 @@ class Users:
                  'GROUP BY u.chat_id, u.first_name, u.nickname, u.last_name, '
                  'u.language '
                  'ORDER BY MAX(time)'
-                 f'DESC LIMIT {limit}')
+                 f'DESC LIMIT %s')
+
+        parameters = limit,
 
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             log.error("Cannot get the last active users because of some "
                       "problems with the database")
@@ -167,10 +170,12 @@ class Users:
                  f'WHERE chat_id in {user_ids} '
                  'GROUP BY chat_id '
                  'ORDER BY MAX(time) '
-                 f'LIMIT {limit}')
+                 f'LIMIT %s')
+
+        parameters = limit,
 
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             log.error("Can't figure out the least active users...")
             return
@@ -199,10 +204,13 @@ class Users:
         """
         query = ("INSERT INTO users (chat_id, first_name, nickname, "
                  "last_name, language) "
-                 f"VALUES ({user.chat_id}, '{user.first_name}', "
-                 f"'{user.nickname}', '{user.last_name}', '{user.language}')")
+                 f"VALUES (%s, %s, %s, %s, %s)")
+
+        parameters = (user.chat_id, user.first_name, user.nickname,
+                      user.last_name, user.language)
+
         try:
-            db.add(query)
+            db.add(query, parameters)
         except DatabaseError:
             log.error("Cannot add user to the database")
         else:
@@ -269,13 +277,16 @@ class Users:
         log.info("User has changed his info")
         log.debug("Updating user's info in the database...")
         query = (f"UPDATE users "
-                 f"SET first_name='{user.first_name}', "
-                 f"nickname='{user.nickname}', "
-                 f"last_name='{user.last_name}' "
-                 f"WHERE chat_id={user.chat_id}")
+                 f"SET first_name=%s, "
+                 f"nickname=%s, "
+                 f"last_name=%s "
+                 f"WHERE chat_id=%s")
+
+        parameters = (user.first_name, user.nickname, user.last_name,
+                      user.chat_id)
 
         try:
-            db.add(query)
+            db.add(query, parameters)
         except DatabaseError:
             log.error("Could not update info about %s in the database",
                       user)
@@ -302,10 +313,11 @@ class Users:
                   "appear in cache")
         query = (f'SELECT first_name, nickname, last_name, language '
                  f'FROM users '
-                 f'WHERE chat_id={message.chat.id}')
+                 f'WHERE chat_id=%s')
 
+        parameters = message.chat.id,
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
 
             # Even if the database in unreachable add user to dictionary

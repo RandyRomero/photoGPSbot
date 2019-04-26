@@ -156,8 +156,9 @@ class ImageHandler:
                 log.info('Looking up collation for %s', tag)
                 query = ('SELECT right_tag '
                          'FROM tag_table '
-                         'WHERE wrong_tag="{}"'.format(tag))
-                cursor = db.execute_query(query)
+                         'WHERE wrong_tag=%s')
+                parameters = tag,
+                cursor = db.execute_query(query, parameters)
                 if not cursor:
                     log.error("Can't check the tag because of the db error")
                     log.warning("Tag will stay as is.")

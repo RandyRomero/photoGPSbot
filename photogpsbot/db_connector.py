@@ -83,6 +83,7 @@ class Database:
         """
         Executes a given query
         :param query: query to execute
+        :param parameters: parameters for query
         :param trials: integer that denotes number of trials to execute
         a query in case of known errors
         :return: cursor object
@@ -124,15 +125,16 @@ class Database:
         else:
             return cursor
 
-    def add(self, query):
+    def add(self, query, parameters=None):
         """
         Shortcut to add something to a database
         :param query: query to execute
+        :param parameters: parameters for query
         :return: boolean - True if the method succeeded and False otherwise
         """
 
         try:
-            self.execute_query(query)
+            self.execute_query(query, parameters)
             self.conn.commit()
         except Exception as e:
             log.errror(e)

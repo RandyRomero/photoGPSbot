@@ -107,7 +107,8 @@ class PhotoMessage:
         same_feature = []
 
         feature_types = ('camera_name', 'lens_name', 'country_en')
-        features = (image_data.camera, image_data.lens, image_data.country['en-US'])
+        features = (image_data.camera, image_data.lens,
+                    image_data.country['en-US'])
 
         for feature_name, feature in zip(feature_types, features):
             if not feature:
@@ -198,9 +199,10 @@ def get_admin_stat(command):
         answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table2 '
-                 'WHERE chat_id !={}'.format(config.MY_TELEGRAM))
+                 'WHERE chat_id !=%s')
+        parameters = (config.MY_TELEGRAM,)
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             answer += ("\nCannot calculate number of photos that were send "
                        "excluding your photos. Check logs")
@@ -215,18 +217,24 @@ def get_admin_stat(command):
         log.info('Evaluating number of photos which were sent today.')
         query = ("SELECT COUNT(chat_id) "
                  "FROM photo_queries_table2 "
-                 "WHERE time > '{}'".format(today))
+                 "WHERE time > %s")
+
+        parameters = (today,)
+
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             return error_answer
         answer += f'{cursor.fetchone()[0]} times users sent photos today.'
         query = ("SELECT COUNT(chat_id) "
                  "FROM photo_queries_table2 "
-                 "WHERE time > '{}' "
-                 "AND chat_id !={}".format(today, config.MY_TELEGRAM))
+                 "WHERE time > %s "
+                 "AND chat_id !=%s")
+
+        parameters = today, config.MY_TELEGRAM
+
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             return error_answer
 
@@ -248,9 +256,11 @@ def get_admin_stat(command):
 
         query = ("SELECT COUNT(DISTINCT chat_id) "
                  "FROM photo_queries_table2 "
-                 "WHERE time > '{}'".format(today))
+                 "WHERE time > %s")
+
+        parameters = (today,)
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             answer += ("\nCannot calculate how many user have sent their "
                        "photos today")
@@ -273,9 +283,10 @@ def get_admin_stat(command):
                    f'cameras/smartphones.')
         query = ("SELECT COUNT(DISTINCT camera_name) "
                  "FROM photo_queries_table2 "
-                 "WHERE time > '{}'".format(today))
+                 "WHERE time > %s")
+        parameters = (today,)
         try:
-            cursor = db.execute_query(query)
+            cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
             answer += ("Cannot calculate the number of gadgets that have been "
                        "used today so far")
@@ -558,10 +569,12 @@ def get_most_popular_items(item_type, message):
     # This query returns item types in order where the first one item
     # has the highest number of occurrences
     # in a given column
-    query = ('SELECT {0} FROM photo_queries_table2 '
-             'GROUP BY {0} '
-             'ORDER BY count({0}) '
-             'DESC'.format(item_type))
+
+    query = (f'SELECT {item_type} FROM photo_queries_table2 '
+             f'GROUP BY {item_type} '
+             f'ORDER BY count({item_type}) '
+             'DESC')
+
     try:
         cursor = db.execute_query(query)
     except DatabaseConnectionError:
@@ -588,7 +601,6 @@ def get_number_users_by_feature(feature, feature_type):
     :param feature: string which is name of a particular feature e.g.
     camera name or country name
     :param feature_type: string which is name of the column in database
-    :param message: telebot object with info about message and its sender
     :return: string which is message to user
     """
     log.debug('Check how many users also have this feature: %s...',
@@ -596,9 +608,12 @@ def get_number_users_by_feature(feature, feature_type):
 
     query = ("SELECT DISTINCT chat_id "
              "FROM photo_queries_table2 "
-             "WHERE {}='{}'".format(feature_type, feature))
+             "WHERE %s=%s")
+
+    parameters = (feature_type, feature)
+
     try:
-        cursor = db.execute_query(query)
+        cursor = db.execute_query(query, parameters)
     except DatabaseConnectionError:
         log.error("Cannot check how many users also have this feature: %s...",
                   feature)
