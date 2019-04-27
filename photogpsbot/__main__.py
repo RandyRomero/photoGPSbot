@@ -1,6 +1,6 @@
 """
-Small bot for Telegram that receives your photo and returns you map where
-it was taken.
+Small bot for Telegram that receives your photo and returns you a map with
+location where the photo was taken.
 Written by Aleksandr Mikheev.
 https://github.com/RandyRomero/photogpsbot
 
@@ -8,34 +8,57 @@ This specific module contains methods to respond user messages, to make
 interactive menus, to handle user language, to process user images
 """
 
-# todo fix database queries in order to user parameters binding!
-
 # todo check what is wrong with geopy on
 #  last versions (some deprecation warning)
 
-# todo rewrite the processing of images
 # todo update docstrings and comments
-
+# todo rewrite admin stat as a class
 from io import BytesIO
 from datetime import datetime, timedelta
 
+# telebot goes as pyTelegramBotAPI in requirements
 from telebot import types
 import requests
 
 from photogpsbot import bot, log, log_files, db, User, users, messages, machine
-from photogpsbot.process_image import ImageHandler
+from photogpsbot.process_image import ImageHandler, ImageData
 from photogpsbot.db_connector import DatabaseConnectionError
 import config
 
+from typing import List, Tuple, Callable
+from telebot.types import Message, CallbackQuery
+
+CACHE_TIME = config.CACHE_TIME
+
 
 class PhotoMessage:
+    """
+    Class that handles user message with a photo. It opens it, gets info from
+    it (via another class), saves info about the photo to the database, finds
+    out how many other users have the same camera, lens or took a photo from
+    the same country. Finally, prepares prepares an answer with this info to
+    be send back to user.
+    """
     def __init__(self, message, user):
+        """
+        init variables
+        :param message: Message object from Telebot
+        :param user: User object that represents one particular user
+        """
         self.message = message
         self.user = user
         self.image_handler = ImageHandler
 
     @staticmethod
     def open_photo(message):
+        """
+        Method that gets from Telegram link to the file, downloads it, opens
+        it like file-like object that will be proceed later by this bot
+        :param message: Message object from Telebot that represents a
+        Telegram message
+        :return: file-like object of a photo that user sent
+        """
+
         # Get temporary link to a photo that user sends to the bot
         file_path = bot.get_file(message.document.file_id).file_path
 
@@ -50,13 +73,13 @@ class PhotoMessage:
             proxies = {'https': config.PROXY_CONFIG}
             r = requests.get(link, proxies=proxies)
 
-        # Get file-like object of user's photo
+        # Get and return file-like object of user's photo
         return BytesIO(r.content)
 
     def get_info(self):
         """
         Opens file that user sent as a file-like object, get necessary info
-        from it and return it
+        from it and return this info
 
         :return: instance of ImageData - my dataclass for storing info about
         an image like user, date, camera name etc
@@ -67,7 +90,7 @@ class PhotoMessage:
 
     def save_info_to_db(self, image_data):
         """
-           When user send photo as a file to get information, bot also stores
+           When user sends photo as a file to get information, bot also stores
            information about this query to the database to keep statistics that
            can be shown to a user in different ways. It stores time of query,
            Telegram id of a user, his camera and lens which were used for
@@ -103,7 +126,17 @@ class PhotoMessage:
         log.info('User query was successfully added to the database.')
 
     @staticmethod
-    def find_num_users_with_same_feature(image_data):
+    def find_num_users_with_same_feature(image_data: ImageData) -> List[int]:
+        """
+        Finds how many users have the same camera, or lens, or took a photo
+        from the same country
+        :param image_data: object with info about a photo that some user
+        sent
+        :return: list with integers where first integer is a number of people
+        how have the same camera, second - numbers of users who have the same
+        lens, the third - number of users who took a photo from the same
+        country
+        """
         same_feature = []
 
         feature_types = ('camera_name', 'lens_name', 'country_en')
@@ -119,11 +152,14 @@ class PhotoMessage:
 
         return same_feature
 
-    def prepare_answer(self):
+    def prepare_answer(self) -> Tuple[Tuple[float, float], str]:
         """
-        Process an image that user sent, get info from it, save data to the
+        Get info from a photo that user sent, save the data to the
         database, make an answer to be sent via Telegram
-        :return:
+
+        :return: a tuple where the first value is a tuple that contains
+        coordinates of a photo, the second is a string with message to user
+        with info about his photo
         """
 
         # Get instance of the dataclass ImageData with info about the image
@@ -156,8 +192,12 @@ class PhotoMessage:
         return coordinates, answer
 
 
-def get_admin_stat(command):
-    # Function that returns statistics to admin by command
+def get_admin_stat(command: str) -> str:
+    """
+    Function that returns statistics to admin by command
+    :param command: string with a command what kind of statistics to prepare
+    :return: a string with either answer with statistics or an error message
+    """
     error_answer = "Can't execute your command. Check logs"
     answer = 'There is some statistics for you: \n'
 
@@ -311,7 +351,13 @@ def get_admin_stat(command):
 
 
 @bot.message_handler(commands=['start'])
-def create_main_keyboard(message):
+def create_main_keyboard(message: Message) -> None:
+    """
+    Creates and renders a main keyboard
+    :param message: message from a user
+    :return: None
+    """
+
     user = users.find_one(message)
     current_user_lang = user.language
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True,
@@ -326,7 +372,13 @@ def create_main_keyboard(message):
 
 # Decorator to handle text messages
 @bot.message_handler(content_types=['text'])
-def handle_menu_response(message):
+def handle_menu_response(message: Message) -> None:
+    """
+    Function that handles user's respond to the main keyboard
+    :param message: user's message
+    :return: None
+    """
+
     # keyboard_hider = telebot.types.ReplyKeyboardRemove()
     current_user_lang = users.find_one(message).language
     user = users.find_one(message)
@@ -405,7 +457,16 @@ def handle_menu_response(message):
 
 
 @bot.callback_query_handler(func=lambda call: True)
-def admin_menu(call):  # Respond commands from admin menu
+def admin_menu(call: CallbackQuery) -> None:
+    """
+    Respond to commands from admin menu
+
+    :param call: object that contains info about user's reaction to an
+    interactive keyboard
+
+    :return: None
+    """
+
     # Remove progress bar from pressed button
     bot.answer_callback_query(callback_query_id=call.id, show_alert=False)
 
@@ -437,53 +498,70 @@ def admin_menu(call):  # Respond commands from admin menu
 
 
 @bot.message_handler(content_types=['photo'])
-def answer_photo_message(message):
+def answer_photo_message(message: Message) -> None:
+    """
+    Handles situations when user sends a photo as a photo not as a file,
+    namely answers to him that he need to send his photo as a file
+
+    :param message: Message objects from Telebot that contains all the data
+    about user's message
+    :return: none
+    """
     user = users.find_one(message)
     bot.send_message(user.chat_id, messages[user.language]['as_file'])
     log.info('%s sent photo as a photo.', user)
 
 
-def cache_number_users_with_same_feature(func):
-    # Closure to cache previous results of given
-    # function so to not call database to much
-    # It saves result in a dictionary because result depends on a user.
-    # cache_time - time in minutes when will
-    # be returned cached result instead of calling database
+def cache_number_users_with_same_feature(func: Callable) -> Callable:
+    """
+    This is a decorator to cache previous results of a given function so to
+    not to call a database to much. It saves its result in a dictionary
+
+    :param func: any function which result you want to cache in order no to
+    call original function to often
+    :return: closure with a given function that was decorated by func_launcher
+    """
 
     when_was_called = None
-    result = {}
+    storage = {}
 
-    def func_launcher(feature, feature_type):
-        nonlocal result
+    def func_launcher(feature: str, feature_type: str) -> int:
+        """
+        Function that calls a given function if it is high time otherwise it
+        returns previous result stored in a dictionary called 'storage'
+
+        :param feature: string which is name of a particular feature e.g.
+        camera name or country name
+        :param feature_type: string which is name of the column in database
+        :return: the result of a given function
+        """
         nonlocal when_was_called
-        cache_time = 5
 
-        # It's high time to reevaluate result instead
-        # of just looking up in cache if countdown went off, if
-        # function has not been called yet, if result for
-        # feature (like camera, lens or country) not in cache
-        high_time = (when_was_called + timedelta(minutes=cache_time) <
+        # It's high time to reevaluate result instead of just looking up in
+        # cache if countdown went off, if function has not been called yet, if
+        # result for a feature (like camera, lens or country) not in cache
+        high_time = (when_was_called + timedelta(minutes=CACHE_TIME) <
                      datetime.now() if when_was_called else True)
 
-        if not when_was_called or high_time or feature not in result:
+        if not when_was_called or high_time or feature not in storage:
             when_was_called = datetime.now()
-            num_of_users = func(feature, feature_type)
-            result[feature] = num_of_users
-            return num_of_users
+            result = func(feature, feature_type)
+            storage[feature] = result
+            return result
         else:
             log.info('Returning cached result of %s',  func.__name__)
-            time_left = (when_was_called + timedelta(minutes=cache_time) -
+            time_left = (when_was_called + timedelta(minutes=CACHE_TIME) -
                          datetime.now())
             log.debug('Time to to reevaluate result of %s is %s',
                       func.__name__, str(time_left)[:-7])
-            return result[feature]
+            return storage[feature]
 
     return func_launcher
 
 
-def cache_most_popular_items(func):
+def cache_most_popular_items(func: Callable) -> Callable:
     """
-    Function that prevent calling any given function more often that once in
+    Function that prevent calling any given function more often than once in
     a cache_time. It calls given function, then during next cache
     return func_launcher_time it
     will return cached result of a given function. Function call given
@@ -502,10 +580,7 @@ def cache_most_popular_items(func):
     result = {}
 
     def function_launcher(item_type, message):
-        nonlocal func
-        nonlocal result
         nonlocal when_was_called
-        cache_time = 5
 
         # Only top countries can be returned in different languages.
         # For the other types of queries it doesn't mean a thing.
@@ -516,7 +591,7 @@ def cache_most_popular_items(func):
 
         # evaluate boolean whether it is high time to call given function or
         # not
-        high_time = (when_was_called + timedelta(minutes=cache_time) <
+        high_time = (when_was_called + timedelta(minutes=CACHE_TIME) <
                      datetime.now() if when_was_called else True)
 
         if not result.get(result_id, None) or not when_was_called or high_time:
@@ -525,7 +600,7 @@ def cache_most_popular_items(func):
             return result[result_id]
         else:
             log.debug('Return cached result of %s...', func.__name__)
-            time_left = (when_was_called + timedelta(minutes=cache_time) -
+            time_left = (when_was_called + timedelta(minutes=CACHE_TIME) -
                          datetime.now())
             log.debug('Time to reevaluate result of %s is %s',
                       func.__name__, str(time_left)[:-7])
@@ -594,7 +669,7 @@ def get_most_popular_items(item_type, message):
 
 
 @cache_number_users_with_same_feature
-def get_number_users_by_feature(feature, feature_type):
+def get_number_users_by_feature(feature: str, feature_type: str) -> int:
     """
     Get number of users that have same smartphone, camera, lens or that
     have been to the same country
@@ -617,11 +692,11 @@ def get_number_users_by_feature(feature, feature_type):
     except DatabaseConnectionError:
         log.error("Cannot check how many users also have this feature: %s...",
                   feature)
-        return None
+        raise
 
     if not cursor.rowcount:
         log.debug('There were no users with %s...', feature)
-        return None
+        return 0
 
     log.debug('There is %d users with %s', cursor.rowcount, feature)
     return cursor.rowcount - 1
