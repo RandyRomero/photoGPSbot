@@ -5,7 +5,7 @@ import exifread
 from exifread.classes import IfdTag
 from geopy.geocoders import Nominatim
 
-from photogpsbot import bot, log, db, User
+from photogpsbot import log, db, User
 
 
 class InvalidCoordinates(Exception):
