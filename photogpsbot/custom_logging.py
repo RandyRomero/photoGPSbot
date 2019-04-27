@@ -89,6 +89,7 @@ class LogFiles:
     def __init__(self):
         self.log = log
         self.log_folder = './log'
+        # todo consider swap namedtuple with DataClass
         self.LogFile = namedtuple('LogFile', 'path, creation_time, size')
         self.logfile_list = []
 
