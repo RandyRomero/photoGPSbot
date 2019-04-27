@@ -4,7 +4,7 @@ location where the photo was taken.
 Written by Aleksandr Mikheev.
 https://github.com/RandyRomero/photogpsbot
 
-This specific module contains methods to respond user messages, to make
+This specific module contains methods to respond us"er messages, to make
 interactive menus, to handle user language, to process user images
 """
 
