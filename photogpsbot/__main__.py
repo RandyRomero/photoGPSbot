@@ -25,7 +25,7 @@ from photogpsbot.process_image import ImageHandler, ImageData
 from photogpsbot.db_connector import DatabaseConnectionError
 import config
 
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Any
 from telebot.types import Message, CallbackQuery
 
 CACHE_TIME = config.CACHE_TIME
@@ -132,22 +132,26 @@ class PhotoMessage:
         from the same country
         :param image_data: object with info about a photo that some user
         sent
-        :return: list with integers where first integer is a number of people
-        how have the same camera, second - numbers of users who have the same
-        lens, the third - number of users who took a photo from the same
+        :return: list with integers where the first integer is a number of
+        people who have the same camera, second - number of users who have the
+        same lens, the third - number of users who took a photo from the same
         country
         """
         same_feature = []
+        country = image_data.country
+        country = country.get('en-US', None) if country else None
 
         feature_types = ('camera_name', 'lens_name', 'country_en')
-        features = (image_data.camera, image_data.lens,
-                    image_data.country['en-US'])
+        features = (image_data.camera, image_data.lens, country)
 
-        for feature_name, feature in zip(feature_types, features):
+        # take a column name and a value to be sought in this column
+        # to find number of distinct users with this value
+        for feature_type, feature in zip(feature_types, features):
             if not feature:
                 same_feature.append(0)
                 continue
-            answer = get_number_users_by_feature(feature, feature_name)
+            answer = get_number_users_by_feature(feature=feature,
+                                                 feature_type=feature_type)
             same_feature.append(answer)
 
         return same_feature
@@ -170,11 +174,11 @@ class PhotoMessage:
         answer = ''
         coordinates = image_data.latitude, image_data.longitude
         if not coordinates[0]:
-            answer += messages[self.user.language]["no_gps"]
+            answer += messages[self.user.language]["no_gps"] + '\n'
 
         answ_template = messages[self.user.language]["camera_info"]
         basic_data = (image_data.date_time, image_data.camera, image_data.lens,
-                      image_data.address[self.user.language])
+                      image_data.address)
 
         # Concatenate templates in language that user prefer with information
         # from the photo, for example: f'{"Camera brand"}:{"Canon 60D"}'
@@ -398,7 +402,8 @@ def handle_menu_response(message: Message) -> None:
     elif message.text == messages[current_user_lang]['top_cams']:
         log.info('User %s asked for top cams', user)
         bot.send_message(user.chat_id,
-                         text=get_most_popular_items('camera_name', message))
+                         text=get_most_popular_items(item_type='camera_name',
+                                                     message=message))
         log.info('List of most popular cameras '
                  'has been returned to %s', user)
 
@@ -411,17 +416,17 @@ def handle_menu_response(message: Message) -> None:
     elif message.text == messages[current_user_lang]['top_lens']:
         log.info('User %s asked for top lens', user)
         bot.send_message(user.chat_id,
-                         text=get_most_popular_items('lens_name',
-                                                     message))
+                         text=get_most_popular_items(item_type='lens_name',
+                                                     message=message))
         log.info('List of most popular lens has been returned to %s', user)
 
     elif message.text == messages[current_user_lang]['top_countries']:
         log.info('User %s asked for top countries', user)
         lang_table_name = ('country_ru'
-                           if current_user_lang == 'ru-RU'
-                           else 'country_en')
+                           if current_user_lang == 'ru-RU' else 'country_en')
         bot.send_message(user.chat_id,
-                         text=get_most_popular_items(lang_table_name, message))
+                         text=get_most_popular_items(item_type=lang_table_name,
+                                                     message=message))
         log.info('List of most popular countries has '
                  'been returned to %s', user)
 
@@ -512,104 +517,43 @@ def answer_photo_message(message: Message) -> None:
     log.info('%s sent photo as a photo.', user)
 
 
-def cache_number_users_with_same_feature(func: Callable) -> Callable:
-    """
-    This is a decorator to cache previous results of a given function so to
-    not to call a database to much. It saves its result in a dictionary
-
-    :param func: any function which result you want to cache in order no to
-    call original function to often
-    :return: closure with a given function that was decorated by func_launcher
-    """
-
+def cache_function_result(func: Callable) -> Callable:
     when_was_called = None
-    storage = {}
+    cache = {}
 
-    def func_launcher(feature: str, feature_type: str) -> int:
-        """
-        Function that calls a given function if it is high time otherwise it
-        returns previous result stored in a dictionary called 'storage'
-
-        :param feature: string which is name of a particular feature e.g.
-        camera name or country name
-        :param feature_type: string which is name of the column in database
-        :return: the result of a given function
-        """
+    def func_launcher(*args, **kwargs) -> Any:
         nonlocal when_was_called
+        item_type = kwargs.get('item_type', None)
+        feature = kwargs.get('feature', None)
+        message = kwargs.get('message', None)
 
-        # It's high time to reevaluate result instead of just looking up in
-        # cache if countdown went off, if function has not been called yet, if
-        # result for a feature (like camera, lens or country) not in cache
+        if item_type == 'country_ru' or item_type == 'country_en':
+            result_id = users.find_one(message).language + item_type
+        elif item_type or feature:
+            result_id = item_type or feature
+        else:
+            raise ValueError("Cannot find a key to cache your function")
+
         high_time = (when_was_called + timedelta(minutes=CACHE_TIME) <
                      datetime.now() if when_was_called else True)
 
-        if not when_was_called or high_time or feature not in storage:
+        if not cache.get(result_id, None) or not when_was_called or high_time:
             when_was_called = datetime.now()
-            result = func(feature, feature_type)
-            storage[feature] = result
+            result = func(*args, **kwargs)
+            cache[result_id] = result
             return result
         else:
-            log.info('Returning cached result of %s',  func.__name__)
+            log.info('Returning cached result of %s', func.__name__)
             time_left = (when_was_called + timedelta(minutes=CACHE_TIME) -
                          datetime.now())
             log.debug('Time to to reevaluate result of %s is %s',
                       func.__name__, str(time_left)[:-7])
-            return storage[feature]
+            return cache[result_id]
 
     return func_launcher
 
 
-def cache_most_popular_items(func: Callable) -> Callable:
-    """
-    Function that prevent calling any given function more often than once in
-    a cache_time. It calls given function, then during next cache
-    return func_launcher_time it
-    will return cached result of a given function. Function call given
-    function when: it hasn't been called before; cache_time is passed,
-    user ask result in another language.
-
-    :param func: some expensive function that we don't want to call too often
-    because it can slow down the script
-    :return: wrapper that figure out when to call function and when to
-    return cached result
-    """
-    # store time when given function was called last time
-    when_was_called = None
-    # dictionary to store result where language of user
-    # is key and message for user is a value
-    result = {}
-
-    def function_launcher(item_type, message):
-        nonlocal when_was_called
-
-        # Only top countries can be returned in different languages.
-        # For the other types of queries it doesn't mean a thing.
-        if item_type == 'country_ru' or item_type == 'country_en':
-            result_id = users.find_one(message).language + item_type
-        else:
-            result_id = item_type
-
-        # evaluate boolean whether it is high time to call given function or
-        # not
-        high_time = (when_was_called + timedelta(minutes=CACHE_TIME) <
-                     datetime.now() if when_was_called else True)
-
-        if not result.get(result_id, None) or not when_was_called or high_time:
-            when_was_called = datetime.now()
-            result[result_id] = func(item_type, message)
-            return result[result_id]
-        else:
-            log.debug('Return cached result of %s...', func.__name__)
-            time_left = (when_was_called + timedelta(minutes=CACHE_TIME) -
-                         datetime.now())
-            log.debug('Time to reevaluate result of %s is %s',
-                      func.__name__, str(time_left)[:-7])
-            return result[result_id]
-
-    return function_launcher
-
-
-@cache_most_popular_items
+@cache_function_result
 def get_most_popular_items(item_type, message):
     """
     Get most common cameras/lenses/countries from database and
@@ -668,7 +612,7 @@ def get_most_popular_items(item_type, message):
     return list_to_ordered_str_list(popular_items[:30])
 
 
-@cache_number_users_with_same_feature
+@cache_function_result
 def get_number_users_by_feature(feature: str, feature_type: str) -> int:
     """
     Get number of users that have same smartphone, camera, lens or that
@@ -676,16 +620,16 @@ def get_number_users_by_feature(feature: str, feature_type: str) -> int:
     :param feature: string which is name of a particular feature e.g.
     camera name or country name
     :param feature_type: string which is name of the column in database
-    :return: string which is message to user
+    :return: string which is a message to user
     """
     log.debug('Check how many users also have this feature: %s...',
               feature)
 
     query = ("SELECT DISTINCT chat_id "
              "FROM photo_queries_table2 "
-             "WHERE %s=%s")
+             f"WHERE {feature_type}=%s")
 
-    parameters = (feature_type, feature)
+    parameters = feature,
 
     try:
         cursor = db.execute_query(query, parameters)
@@ -715,12 +659,13 @@ def handle_message_with_image(message):
 
     # if longitude is in the answer
     if answer[0][0]:
+        # extract longitude and latitude
         lon = answer[0][0]
         lat = answer[0][1]
         bot.send_location(user.chat_id, lon, lat, live_period=None)
         bot.reply_to(message, answer[1], parse_mode='Markdown')
     else:
-        bot.reply_to(message, answer, parse_mode='Markdown')
+        bot.reply_to(message, answer[1], parse_mode='Markdown')
 
 
 def main():

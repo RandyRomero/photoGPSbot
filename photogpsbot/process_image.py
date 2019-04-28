@@ -214,11 +214,14 @@ class ImageHandler:
             longitude = self._get_dd_coordinate(raw_data.raw_longitude,
                                                 raw_data.longitude_reference)
 
+        except AttributeError as e:
+            log.info(e)
+            log.info("The photo does not contain coordinates")
+            raise NoCoordinates
+
         except Exception as e:
-            # todo also find out the error in case there is no coordinates in
-            #  raw_data
-            log.error(e)
-            log.error('Cannot read coordinates of this photo.')
+            log.info(e)
+            log.info('Cannot read coordinates of this photo.')
             raw_coordinates = (f'Latitude reference: '
                                f'{raw_data.latitude_reference}\n'
                                f'Raw latitude: {raw_data.raw_latitude}.\n'
@@ -231,8 +234,7 @@ class ImageHandler:
         else:
             return latitude, longitude
 
-    @staticmethod
-    def _get_address(latitude, longitude):
+    def _get_address(self, latitude, longitude):
 
         """
          # Get address as a string by coordinates from photo that user sent
@@ -249,16 +251,19 @@ class ImageHandler:
         coordinates = f"{latitude}, {longitude}"
         log.debug('Getting address from coordinates %s...', coordinates)
         geolocator = Nominatim()
+        lang = self.user.language
 
         try:
             # Get name of the country in English and Russian language
-            location = geolocator.reverse(coordinates, language='en')
-            address['en-US'] = location.address
-            country['en-US'] = location.raw['address']['country']
+            location_en = geolocator.reverse(coordinates, language='en')
+            address['en-US'] = location_en.address
+            country['en-US'] = location_en.raw['address']['country']
 
-            location2 = geolocator.reverse(coordinates, language='ru')
-            address['ru-RU'] = location2.address
-            country['ru-RU'] = location2.raw['address']['country']
+            location_ru = geolocator.reverse(coordinates, language='ru')
+            address['ru-RU'] = location_ru.address
+            country['ru-RU'] = location_ru.raw['address']['country']
+
+            address = address[lang]
             return address, country
 
         except Exception as e:
