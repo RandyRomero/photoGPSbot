@@ -37,7 +37,7 @@ class NoData(Exception):
 @dataclass
 class ImageData:
     """
-    A class to store info about a photo from user.
+    A class to store info about a photo from a user.
     """
     user: User
     date_time: str = None

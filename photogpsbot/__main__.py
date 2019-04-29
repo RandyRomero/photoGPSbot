@@ -15,30 +15,47 @@ interactive menus, to handle user language, to process user images
 # todo rewrite admin stat as a class
 from io import BytesIO
 from datetime import datetime, timedelta
+from dataclasses import dataclass
+from typing import List, Tuple, Callable, Any
 
 # telebot goes as pyTelegramBotAPI in requirements
 from telebot import types
+from telebot.types import Message, CallbackQuery
 import requests
 
 from photogpsbot import bot, log, log_files, db, User, users, messages, machine
-from photogpsbot.process_image import ImageHandler, ImageData
+from photogpsbot.process_image import ImageHandler, ImageData, NoData
 from photogpsbot.db_connector import DatabaseConnectionError
 import config
-
-from typing import List, Tuple, Callable, Any
-from telebot.types import Message, CallbackQuery
 
 CACHE_TIME = config.CACHE_TIME
 
 
 class PhotoMessage:
     """
-    Class that handles user message with a photo. It opens it, gets info from
-    it (via another class), saves info about the photo to the database, finds
-    out how many other users have the same camera, lens or took a photo from
+    Class makes prepares a response for user's message with a photo.
+
+    It opens a photo from user's message, gets info from it (via another
+    class), saves info about the photo to the database, finds out how many
+    other users have the same camera, lens or took a photo from
     the same country. Finally, prepares prepares an answer with this info to
     be send back to user.
     """
+
+    @dataclass
+    class Answer:
+        """
+        Dataclass that contains information to be sent to a user
+
+        This dataclass is for storing information that is sent to user
+        in response to a photography. It is supposed to contain a
+        tuple with coordinates (longitude and latitude) of a place
+        where a user made his photo. Ans a string with the suitable answer
+        to a user
+        """
+        coordinates: Tuple = None
+        answer: str = ''
+
     def __init__(self, message, user):
         """
         init variables
@@ -76,7 +93,7 @@ class PhotoMessage:
         # Get and return file-like object of user's photo
         return BytesIO(r.content)
 
-    def get_info(self):
+    def get_info(self) -> ImageData:
         """
         Opens file that user sent as a file-like object, get necessary info
         from it and return this info
@@ -88,20 +105,20 @@ class PhotoMessage:
         image = self.image_handler(self.user, user_photo)
         return image.get_image_info()
 
-    def save_info_to_db(self, image_data):
+    def save_info_to_db(self, image_data: ImageData) -> None:
         """
-           When user sends photo as a file to get information, bot also stores
-           information about this query to the database to keep statistics that
-           can be shown to a user in different ways. It stores time of query,
-           Telegram id of a user, his camera and lens which were used for
-           taking photo, his first and last name, nickname and country where
-           the photo was taken. The bot does not save photos or their
-           coordinates.
+        When user sends photo as a file to get information, bot also stores
+        information about this query to the database to keep statistics that
+        can be shown to a user in different ways. It stores time of query,
+        Telegram id of a user, his camera and lens which were used for
+        taking photo, his first and last name, nickname and country where
+        the photo was taken. The bot does not save photos or their
+        coordinates.
 
-           :image_data: an instance of ImageData dataclass with info about
-           the image
-           :return: None
-           """
+        :image_data: an instance of ImageData dataclass with info about
+        the image
+        :return: None
+        """
         camera_name, lens_name = image_data.camera, image_data.lens
         camera_name = f'"{camera_name}"' if camera_name else None
         lens_name = f'"{lens_name}"' if lens_name else None
@@ -156,7 +173,7 @@ class PhotoMessage:
 
         return same_feature
 
-    def prepare_answer(self) -> Tuple[Tuple[float, float], str]:
+    def prepare_answer(self) -> Answer:
         """
         Get info from a photo that user sent, save the data to the
         database, make an answer to be sent via Telegram
@@ -166,15 +183,22 @@ class PhotoMessage:
         with info about his photo
         """
 
+        answer = self.Answer()
+
         # Get instance of the dataclass ImageData with info about the image
-        image_data = self.get_info()
+        try:
+            image_data = self.get_info()
+        except NoData:
+            answer.answer = messages[self.user.language]['no_exif']
+            return answer
+
         # Save some general info about the user's query to the database
         self.save_info_to_db(image_data)
 
-        answer = ''
-        coordinates = image_data.latitude, image_data.longitude
-        if not coordinates[0]:
-            answer += messages[self.user.language]["no_gps"] + '\n'
+        if image_data.latitude and image_data.longitude:
+            answer.coordinates = image_data.latitude, image_data.longitude
+        else:
+            answer.answer += messages[self.user.language]["no_gps"] + '\n'
 
         answ_template = messages[self.user.language]["camera_info"]
         basic_data = (image_data.date_time, image_data.camera, image_data.lens,
@@ -184,16 +208,16 @@ class PhotoMessage:
         # from the photo, for example: f'{"Camera brand"}:{"Canon 60D"}'
         for arg in zip(answ_template, basic_data):
             if arg[1]:
-                answer += f'*{arg[0]}*: {arg[1]}\n'
+                answer.answer += f'*{arg[0]}*: {arg[1]}\n'
 
         lang = self.user.language
         lang_templates = messages[lang]["users with the same feature"].values()
         ppl_wth_same_featrs = self.find_num_users_with_same_feature(image_data)
         for template, feature in zip(lang_templates, ppl_wth_same_featrs):
             if feature:
-                answer += f'{template} {feature}\n'
+                answer.answer += f'{template} {feature}\n'
 
-        return coordinates, answer
+        return answer
 
 
 def get_admin_stat(command: str) -> str:
@@ -654,14 +678,15 @@ def handle_message_with_image(message):
     answer = photo_message.prepare_answer()
 
     # if longitude is in the answer
-    if answer[0][0]:
+    if answer.coordinates:
         # extract longitude and latitude
-        lon = answer[0][0]
-        lat = answer[0][1]
-        bot.send_location(user.chat_id, lon, lat, live_period=None)
-        bot.reply_to(message, answer[1], parse_mode='Markdown')
+        bot.send_location(user.chat_id,
+                          answer.coordinates[0],
+                          answer.coordinates[1],
+                          live_period=None)
+        bot.reply_to(message, answer.answer, parse_mode='Markdown')
     else:
-        bot.reply_to(message, answer[1], parse_mode='Markdown')
+        bot.reply_to(message, answer.answer, parse_mode='Markdown')
 
 
 def main():
