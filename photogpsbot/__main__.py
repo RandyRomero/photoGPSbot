@@ -114,7 +114,7 @@ class PhotoMessage:
 
         log.info('Adding user query to photo_queries_table...')
 
-        query = ('INSERT INTO photo_queries_table '
+        query = ('INSERT INTO photo_queries_table2 '
                  '(chat_id, camera_name, lens_name, country_en, country_ru) '
                  'VALUES (%s, %s, %s, %s, %s)')
 
@@ -213,7 +213,6 @@ def get_admin_stat(command: str) -> str:
 
     # Last users with date of last time when they used bot
     if command == 'last active users':
-
         try:
             last_active_users = users.get_last_active_users(100)
         except DatabaseConnectionError:
@@ -240,11 +239,11 @@ def get_admin_stat(command: str) -> str:
             cursor = db.execute_query(query)
         except DatabaseConnectionError:
             return error_answer
-        answer += '{} times users sent photos.'.format(cursor.fetchone()[0])
+        answer += f'{cursor.fetchone()[0]} times users sent photos.'
         query = ('SELECT COUNT(chat_id) '
                  'FROM photo_queries_table2 '
                  'WHERE chat_id !=%s')
-        parameters = (config.MY_TELEGRAM,)
+        parameters = config.MY_TELEGRAM,
         try:
             cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
@@ -252,7 +251,7 @@ def get_admin_stat(command: str) -> str:
                        "excluding your photos. Check logs")
             return answer
 
-        answer += '\nExcept you: {} times.'.format(cursor.fetchone()[0])
+        answer += f'\nExcept you: {cursor.fetchone()[0]} times.'
         log.info('Done.')
         return answer
 
@@ -263,8 +262,7 @@ def get_admin_stat(command: str) -> str:
                  "FROM photo_queries_table2 "
                  "WHERE time > %s")
 
-        parameters = (today,)
-
+        parameters = today,
         try:
             cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
@@ -276,7 +274,6 @@ def get_admin_stat(command: str) -> str:
                  "AND chat_id !=%s")
 
         parameters = today, config.MY_TELEGRAM
-
         try:
             cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
@@ -301,8 +298,7 @@ def get_admin_stat(command: str) -> str:
         query = ("SELECT COUNT(DISTINCT chat_id) "
                  "FROM photo_queries_table2 "
                  "WHERE time > %s")
-
-        parameters = (today,)
+        parameters = today,
         try:
             cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
@@ -328,7 +324,7 @@ def get_admin_stat(command: str) -> str:
         query = ("SELECT COUNT(DISTINCT camera_name) "
                  "FROM photo_queries_table2 "
                  "WHERE time > %s")
-        parameters = (today,)
+        parameters = today,
         try:
             cursor = db.execute_query(query, parameters)
         except DatabaseConnectionError:
