@@ -79,10 +79,11 @@ class Database:
                                     charset='utf8')
         log.info('Connected to the database.')
 
-    def execute_query(self, query, trials=0):
+    def execute_query(self, query, parameters=None, trials=0):
         """
         Executes a given query
         :param query: query to execute
+        :param parameters: parameters for query
         :param trials: integer that denotes number of trials to execute
         a query in case of known errors
         :return: cursor object
@@ -92,7 +93,7 @@ class Database:
 
         try:
             cursor = self.conn.cursor()
-            cursor.execute(query)
+            cursor.execute(query, parameters)
 
         # try to reconnect if MySQL server has gone away
         except MySQLdb.OperationalError as e:
@@ -114,7 +115,7 @@ class Database:
                 # trying to execute query one more time
                 log.warning(e)
                 log.info("Trying execute the query again...")
-                return self.execute_query(query, trials)
+                return self.execute_query(query, parameters, trials)
             else:
                 log.error(e)
                 raise
@@ -124,15 +125,16 @@ class Database:
         else:
             return cursor
 
-    def add(self, query):
+    def add(self, query, parameters=None):
         """
         Shortcut to add something to a database
         :param query: query to execute
+        :param parameters: parameters for query
         :return: boolean - True if the method succeeded and False otherwise
         """
 
         try:
-            self.execute_query(query)
+            self.execute_query(query, parameters)
             self.conn.commit()
         except Exception as e:
             log.errror(e)
@@ -151,3 +153,9 @@ class Database:
             log.info('SSH tunnel has been closed.')
         self.tunnel_opened = False
         return True
+
+    def __str__(self):
+        return (f'Instance of a connector to the database. '
+                f'The connection is {"opened" if self.conn else "closed"}. '
+                f'SSH tunnel is {"opened" if self.tunnel_opened else "closed"}'
+                '.')

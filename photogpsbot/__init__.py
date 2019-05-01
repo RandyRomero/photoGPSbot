@@ -1,12 +1,12 @@
 """
-Initiating essential modules for photoGPSbot
+Initiating essential parts for photoGPSbot
 """
 
 import logging
 import socket
 import json
 
-# Load file with messages for user in two languages
+# Load file with messages for users in two languages
 with open('photogpsbot/language_pack.json', 'r', encoding='utf8') as json_file:
     messages = json.load(json_file)
 

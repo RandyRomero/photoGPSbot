@@ -66,3 +66,8 @@ class TelegramBot(telebot.TeleBot):
         log.info('Auf Wiedersehen! Bot is turned off.')
         sys.exit()
 
+    def __str__(self):
+        return ('Instance of a Telegram bot. '
+                f'Started connection '
+                f'at {self.start_time.strftime("%Y-%m-%d %H:%M:%S")}.')
+
