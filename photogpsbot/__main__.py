@@ -24,7 +24,7 @@ from telebot.types import Message, CallbackQuery
 import requests
 
 from photogpsbot import bot, log, log_files, db, User, users, messages, machine
-from photogpsbot.process_image import ImageHandler, ImageData, NoData
+from photogpsbot.process_image import ImageHandler, ImageData, NoData, NoEXIF
 from photogpsbot.db_connector import DatabaseConnectionError
 import config
 
@@ -120,14 +120,12 @@ class PhotoMessage:
         :return: None
         """
         camera_name, lens_name = image_data.camera, image_data.lens
-        camera_name = f'"{camera_name}"' if camera_name else None
-        lens_name = f'"{lens_name}"' if lens_name else None
 
         if not image_data.country:
             country_en = country_ru = None
         else:
-            country_en = f'"{image_data.country["en-US"]}"'
-            country_ru = f'"{image_data.country["ru-RU"]}"'
+            country_en = image_data.country["en-US"]
+            country_ru = image_data.country["ru-RU"]
 
         log.info('Adding user query to photo_queries_table...')
 
@@ -188,7 +186,7 @@ class PhotoMessage:
         # Get instance of the dataclass ImageData with info about the image
         try:
             image_data = self.get_info()
-        except NoData:
+        except (NoData, NoEXIF):
             answer.answer = messages[self.user.language]['no_exif']
             return answer
 

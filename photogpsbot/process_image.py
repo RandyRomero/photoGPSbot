@@ -104,12 +104,17 @@ class ImageHandler:
             raise NoData(reason)
 
         try:  # Extract coordinates from EXIF
-            latitude_reference = str(exif['GPS GPSLatitudeRef'])
+            lat_ref = exif['GPS GPSLatitudeRef']
+            lon_ref = exif['GPS GPSLongitudeRef']
+
+            # prevent having ifdtag instead of a plane None
+            latitude_reference = str(lat_ref) if lat_ref.values else None
+            longitude_reference = str(lon_ref) if lon_ref.values else None
+
             raw_latitude = exif['GPS GPSLatitude']
-            longitude_reference = str(exif['GPS GPSLongitudeRef'])
             raw_longitude = exif['GPS GPSLongitude']
 
-        except KeyError:
+        except (KeyError, AttributeError):
             log.info("This picture doesn't contain coordinates.")
             # returning info about the photo without coordinates
             return (date_time, camera_brand, camera_model,
@@ -214,9 +219,9 @@ class ImageHandler:
             longitude = self._get_dd_coordinate(raw_data.raw_longitude,
                                                 raw_data.longitude_reference)
 
-        except AttributeError as e:
+        except (AttributeError, TypeError) as e:
             log.info(e)
-            log.info("The photo does not contain coordinates")
+            log.info("The photo does not contain proper coordinates")
             raise NoCoordinates
 
         except Exception as e:
@@ -226,13 +231,12 @@ class ImageHandler:
                                f'{raw_data.latitude_reference}\n'
                                f'Raw latitude: {raw_data.raw_latitude}.\n'
                                f'Longitude reference: '
-                               f'{raw_data.longitude_reference} '
+                               f'{raw_data.longitude_reference}\n'
                                f'Raw longitude: {raw_data.raw_longitude}.\n')
             log.info(raw_coordinates)
             raise InvalidCoordinates
 
-        else:
-            return latitude, longitude
+        return latitude, longitude
 
     def _get_address(self, latitude, longitude):
 
@@ -267,8 +271,8 @@ class ImageHandler:
             return address, country
 
         except Exception as e:
-            log.error('Getting address has failed!')
             log.error(e)
+            log.error('Getting address has failed!')
             raise
 
     def _convert_data(self, raw_data):
