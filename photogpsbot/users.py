@@ -1,6 +1,6 @@
 """
 Module to manage users of bot: store and update information, interact with
-the database, keep tack of and switch language of interface for user
+the database, keep tack of and switch language of interface for a user
 """
 
 import config
@@ -8,11 +8,16 @@ from photogpsbot import bot, log, db
 from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
 
 from telebot.types import Message
+from typing import Tuple
+
 
 class User:
     """
-    Class that describes one user of this Telegram bot and helps to store basic
-    info about him and his language of choice for interface of the bot
+    Class that represents a user of photoGPSbot
+
+    Class that represents one user of this Telegram bot and helps to store
+    and retrieve basic info about him and his language of choice for
+    interface of the bot
     """
     def __init__(self, chat_id, first_name, nickname, last_name,
                  language='en-US'):
@@ -22,9 +27,10 @@ class User:
         self.last_name = last_name
         self.language = language
 
-    def set_language(self, lang):
+    def set_language(self, lang: str) -> None:
         """
         Update language of user in the User object and in the database
+
         :param lang: string with language tag like "en-US"
         :return: None
         """
@@ -45,9 +51,10 @@ class User:
         else:
             log.debug('Language updated.')
 
-    def switch_language(self):
+    def switch_language(self) -> str:
         """
         Switch language from Russian to English or conversely
+
         :return: string with language tag like "en-US" to be used for
         rendering menus and messages for user
         """
@@ -72,16 +79,19 @@ class User:
 
 class Users:
     """
-    Class for managing users of the bot: find them, add to system,
+    Class for managing users of the bot
+
+    The class let you find them, add to system,
     cache them from the database, check whether user changed his info etc
     """
     def __init__(self):
         self.users = {}
 
     @staticmethod
-    def get_total_number():
+    def get_total_number() -> int:
         """
         Count the total number of users in the database
+
         :return: integer which is the total number of users
         """
         query = "SELECT COUNT(*) FROM users"
@@ -94,12 +104,14 @@ class Users:
         return cursor.fetchone()[0]
 
     @staticmethod
-    def get_last_active_users(limit):
+    def get_last_active_users(limit: int) -> Tuple[Tuple[int, str, str, str,
+                                                         str]]:
         """
         Get from the database a tuple of users who have been recently using
         the bot
+
         :param limit: integer that specifies how much users to get
-        :return: tuple of tuples with users info
+        :return: tuple of tuples with user's info
         """
         log.info('Evaluating last active users with date of '
                  'last time when they used bot...')
@@ -127,12 +139,14 @@ class Users:
             raise
 
         last_active_users = cursor.fetchall()
+        log.debug(last_active_users)
         return last_active_users
 
-    def cache(self, limit):
+    def cache(self, limit: int) -> None:
         """
         Caches last active users from database to a dictionary inside object of
         this class
+
         :param limit: limit of entries to be cached
         :return: None
         """
@@ -153,10 +167,11 @@ class Users:
                 log.debug("Caching user: %s", self.users[items[0]])
         log.info('Users have been cached.')
 
-    def clean_cache(self, limit):
+    def clean_cache(self, limit: int) -> None:
         """
         Method that remove several User objects from cache - the least 
         active users
+
         :param limit: number of the users that the method should remove
         from cache
         :return: None
@@ -196,9 +211,10 @@ class Users:
         log.debug("%d users were removed from cache.", num_deleted_entries)
 
     @staticmethod
-    def _add_to_db(user):
+    def _add_to_db(user: User) -> None:
         """
-        Adds User object to the database
+        Adds the User object to the database
+
         :param user: User object with info about user
         :return: None
         """
@@ -216,11 +232,14 @@ class Users:
         else:
             log.info(f"User {user} was successfully added to the users db")
 
-    def add_new_one(self, chat_id, first_name, nickname, last_name, language,
-                    add_to_db=True):
+    def add_new_one(self,
+                    chat_id: int, first_name: str, nickname: str,
+                    last_name: str, language: str,
+                    add_to_db: bool = True) -> User:
         """
-        Function to add a new User in dictionary with users and to the database
+        Adds a new User in dictionary with users and to the database
         at one fell swoop
+
         :param chat_id: id of a Telegram user
         :param first_name: first name of a Telegram user
         :param nickname: nickname of a Telegram user
@@ -238,8 +257,10 @@ class Users:
         return user
 
     @staticmethod
-    def compare_and_update(user, message):
+    def compare_and_update(user, message: Message) -> None:
         """
+        Updates user's info if needed
+
         This method compare a user object from the bot and his info from
         the Telegram message to check whether a user has changed his bio
         or not. If yes, the user object that represents him in the bot will
@@ -297,6 +318,7 @@ class Users:
         """
         Look up a user by a message which we get together with request
         from Telegram
+
         :param message: object from Telegram that contains info about user's
         message and about himself
         :return: user object that represents a Telegram user in this bot

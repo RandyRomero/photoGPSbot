@@ -8,11 +8,8 @@ This specific module contains methods to respond us"er messages, to make
 interactive menus, to handle user language, to process user images
 """
 
-# todo check what is wrong with geopy on
-#  last versions (some deprecation warning)
 
 # todo update docstrings and comments
-# todo rewrite admin stat as a class
 from io import BytesIO
 from datetime import datetime, timedelta
 from dataclasses import dataclass
