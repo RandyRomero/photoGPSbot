@@ -5,3 +5,4 @@ prod.txt
 *.pyc
 .env
 misc/
+.mypy_cache/

@@ -50,7 +50,7 @@ class PhotoMessage:
         where a user made his photo. Ans a string with the suitable answer
         to a user
         """
-        coordinates: Tuple = None
+        coordinates: Tuple = ()
         answer: str = ''
 
     def __init__(self, message, user):

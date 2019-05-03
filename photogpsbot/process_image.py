@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 
 import exifread
@@ -40,13 +40,13 @@ class ImageData:
     A class to store info about a photo from a user.
     """
     user: User
-    date_time: str = None
-    camera: str = None
-    lens: str = None
-    address: str = None
-    country: Dict[str, str] = None
-    latitude: float = None
-    longitude: float = None
+    date_time: str = ''
+    camera: str = ''
+    lens: str = ''
+    address: str = ''
+    country: Dict[str, str] = field(default_factory=dict)
+    latitude: float = 0
+    longitude: float = 0
 
 
 @dataclass
@@ -55,15 +55,15 @@ class RawImageData:
     Raw data from photo that is still have to be converted in order to be used.
     """
     user: User
-    date_time: str = None
-    camera_brand: str = None
-    camera_model: str = None
-    lens_brand: str = None
-    lens_model: str = None
-    latitude_reference: str = None
-    raw_latitude: IfdTag = None
-    longitude_reference: str = None
-    raw_longitude: IfdTag = None
+    date_time: str = ''
+    camera_brand: str = ''
+    camera_model: str = ''
+    lens_brand: str = ''
+    lens_model: str = ''
+    latitude_reference: str = ''
+    raw_latitude: IfdTag = ''
+    longitude_reference: str = ''
+    raw_longitude: IfdTag = ''
 
 
 class ImageHandler:

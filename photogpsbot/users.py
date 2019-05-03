@@ -139,7 +139,6 @@ class Users:
             raise
 
         last_active_users = cursor.fetchall()
-        log.debug(last_active_users)
         return last_active_users
 
     def cache(self, limit: int) -> None:
