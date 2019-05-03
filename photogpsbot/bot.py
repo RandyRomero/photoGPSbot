@@ -9,7 +9,7 @@ from datetime import datetime
 import sys
 
 # goes as pyTelegramBotAPI in requirements
-import telebot
+import telebot  # type: ignore
 
 import config
 from photogpsbot import log

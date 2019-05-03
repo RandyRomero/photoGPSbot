@@ -7,7 +7,7 @@ import config
 from photogpsbot import bot, log, db
 from photogpsbot.db_connector import DatabaseError, DatabaseConnectionError
 
-from telebot.types import Message
+from telebot.types import Message  # type: ignore
 from typing import Tuple
 
 
@@ -67,11 +67,11 @@ class User:
 
         return new_lang
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (f'{self.first_name} {self.nickname} {self.last_name} '
                 f'({self.chat_id}) preferred language: {self.language}')
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (f'{self.__class__.__name__}(chat_id={self.chat_id}, '
                 f'first_name="{self.first_name}", nickname="{self.nickname}", '
                 f'last_name="{self.last_name}", language="{self.language}")')
@@ -159,9 +159,9 @@ class Users:
             return
 
         for items in last_active_users:
-            # if chat_id of a user is not known to the program
+            # if chat_id of a user is not known to the bot
             if items[0] not in self.users:
-                # adding users from database to the "cache"
+                # adding a user from the database to the "cache"
                 self.users[items[0]] = User(*items)
                 log.debug("Caching user: %s", self.users[items[0]])
         log.info('Users have been cached.')

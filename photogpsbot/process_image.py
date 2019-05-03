@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from typing import Dict
 
-import exifread
-from exifread.classes import IfdTag
-from geopy.geocoders import Nominatim
+import exifread  # type: ignore
+from exifread.classes import IfdTag  # type: ignore
+from geopy.geocoders import Nominatim  # type: ignore
 
 from photogpsbot import log, db, User
 

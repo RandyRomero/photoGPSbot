@@ -18,7 +18,7 @@ from collections import namedtuple
 import re
 from datetime import datetime as dt, timedelta as td
 
-import send2trash
+import send2trash  # type: ignore
 
 import config
 

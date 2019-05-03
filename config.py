@@ -2,7 +2,7 @@
 environment and than get it back from there as variables"""
 
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 load_dotenv('.env')
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')

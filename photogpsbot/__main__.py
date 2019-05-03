@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from typing import List, Tuple, Callable, Any
 
 # telebot goes as pyTelegramBotAPI in requirements
-from telebot import types
-from telebot.types import Message, CallbackQuery
+from telebot import types  # type: ignore
+from telebot.types import Message, CallbackQuery  # type: ignore
 import requests
 
 from photogpsbot import bot, log, log_files, db, User, users, messages, machine
@@ -53,9 +53,10 @@ class PhotoMessage:
         coordinates: Tuple = ()
         answer: str = ''
 
-    def __init__(self, message, user):
+    def __init__(self, message: Message, user: User) -> None:
         """
-        init variables
+        Init variables
+
         :param message: Message object from Telebot
         :param user: User object that represents one particular user
         """
@@ -64,10 +65,13 @@ class PhotoMessage:
         self.image_handler = ImageHandler
 
     @staticmethod
-    def open_photo(message):
+    def open_photo(message: Message) -> BytesIO:
         """
-        Method that gets from Telegram link to the file, downloads it, opens
+        Extracts a link of a photo and return file-like object of it
+
+        Method that gets from Telegram a link to the file, downloads it, opens
         it like file-like object that will be proceed later by this bot
+
         :param message: Message object from Telebot that represents a
         Telegram message
         :return: file-like object of a photo that user sent
@@ -92,6 +96,8 @@ class PhotoMessage:
 
     def get_info(self) -> ImageData:
         """
+        Returns you info about a photo
+
         Opens file that user sent as a file-like object, get necessary info
         from it and return this info
 
@@ -104,6 +110,8 @@ class PhotoMessage:
 
     def save_info_to_db(self, image_data: ImageData) -> None:
         """
+        Insert info about user's query to the database
+
         When user sends photo as a file to get information, bot also stores
         information about this query to the database to keep statistics that
         can be shown to a user in different ways. It stores time of query,
@@ -142,6 +150,7 @@ class PhotoMessage:
         """
         Finds how many users have the same camera, or lens, or took a photo
         from the same country
+
         :param image_data: object with info about a photo that some user
         sent
         :return: list with integers where the first integer is a number of
@@ -373,6 +382,7 @@ def get_admin_stat(command: str) -> str:
 def create_main_keyboard(message: Message) -> None:
     """
     Creates and renders a main keyboard
+
     :param message: message from a user
     :return: None
     """
@@ -394,6 +404,7 @@ def create_main_keyboard(message: Message) -> None:
 def handle_menu_response(message: Message) -> None:
     """
     Function that handles user's respond to the main keyboard
+
     :param message: user's message
     :return: None
     """
@@ -479,7 +490,7 @@ def handle_menu_response(message: Message) -> None:
 @bot.callback_query_handler(func=lambda call: True)
 def admin_menu(call: CallbackQuery) -> None:
     """
-    Respond to commands from admin menu
+    Respond to commands from the admin menu
 
     :param call: object that contains info about user's reaction to an
     interactive keyboard
@@ -569,10 +580,11 @@ def cache_function_result(func: Callable) -> Callable:
 
 
 @cache_function_result
-def get_most_popular_items(item_type, message):
+def get_most_popular_items(item_type: str, message: Message) -> str:
     """
-    Get most common cameras/lenses/countries from database and
+    Get the most common cameras/lenses/countries from database and
     make list of them
+
     :param item_type: string with column name to choose between cameras,
     lenses and countries
     :param message: telebot object with info about user and his message
@@ -583,11 +595,18 @@ def get_most_popular_items(item_type, message):
 
     user = users.find_one(message)
 
-    def list_to_ordered_str_list(list_of_gadgets):
-        # Make Python list to be string like roster with indexes and
-        # new line characters like:
-        # 1. Canon 80D
-        # 2. iPhone 4S
+    def tuple_to_ordered_str_list(list_of_gadgets: Tuple[Tuple[str]]) -> str:
+        """
+        Converts Python list to ordered list as a string
+
+        Example:
+        1. Canon 80D
+        2. iPhone 4S
+
+        :param list_of_gadgets: tuple of tuples with string where every string
+        is a name of a camera or lens or a country
+        :return: ordered list as a string
+        """
 
         string_roaster = ''
         index = 1
@@ -624,7 +643,7 @@ def get_most_popular_items(item_type, message):
 
     popular_items = cursor.fetchall()
     log.info('Finish evaluating the most popular items')
-    return list_to_ordered_str_list(popular_items[:30])
+    return tuple_to_ordered_str_list(popular_items[:30])
 
 
 @cache_function_result

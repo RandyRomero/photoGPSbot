@@ -10,8 +10,8 @@ https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 import socket
 
 # goes as mysqlclient in requirements
-import MySQLdb
-import sshtunnel
+import MySQLdb  # type: ignore
+import sshtunnel  # type: ignore
 
 from photogpsbot import log
 import config

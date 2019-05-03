@@ -7,7 +7,7 @@ import socket
 import json
 
 # telebot goes as pyTelegramBotAPI in requirements
-from telebot import apihelper
+from telebot import apihelper  # type: ignore
 
 import config
 
