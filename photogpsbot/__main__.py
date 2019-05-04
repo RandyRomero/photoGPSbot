@@ -680,7 +680,7 @@ def get_number_users_by_feature(feature: str, feature_type: str) -> int:
 
 
 @bot.message_handler(content_types=['document'])  # receive file
-def handle_message_with_image(message):
+def handle_message_with_image(message: Message) -> None:
 
     user = users.find_one(message)
     # Sending a message to a user that his photo is being processed
@@ -702,7 +702,7 @@ def handle_message_with_image(message):
         bot.reply_to(message, answer.answer, parse_mode='Markdown')
 
 
-def main():
+def main() -> None:
     log_files.clean_log_folder(1)
     users.cache(100)
     db.connect()
