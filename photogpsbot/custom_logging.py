@@ -2,30 +2,43 @@
 This is a module that sets up a custom logger for the Telegram bot; this
 logger will write messages to the stdout, to the text files within ./log folder
 and also it will send messages to the admin of the bot in case of ERROR level
-of the log message
+of the log message.
 
 Also there is a special class to handle log files and another one that is an
 extension for StreamHandler for logger that provides a way to send
 the last N symbols of the last log file to the admin via Telegram. You have to
-add this TelegramHandler to the logger after initiating the bot
+add this TelegramHandler to the logger after initiating the bot.
 
 """
 
 import time
 import os
 import logging
-from collections import namedtuple
+from logging import Logger
 import re
 from datetime import datetime as dt, timedelta as td
+from typing import List
+from dataclasses import dataclass
 
 import send2trash  # type: ignore
 
 import config
 
 
-def make_custom_logger():
+@dataclass
+class LogFile:
+    """
+    Represents one txt file with logs
+    """
+    path: str
+    creation_time: float
+    size: float  # size of the log file in megabytes
+
+
+def make_custom_logger() -> Logger:
     """
     Set up a new custom logger for using across modules of the bot
+
     :return: new logging.Logger() instance
     """
 
@@ -82,28 +95,29 @@ log = make_custom_logger()
 
 class LogFiles:
     """
-    Helps to manage log files in a log folder. Checks size of logs,
-    cleans the log folder if there are to many logs, makes list
-    of log files with their path, size and date and time of creation
-    """
-    def __init__(self):
-        self.log = log
-        self.log_folder = './log'
-        # todo consider swap namedtuple with DataClass
-        self.LogFile = namedtuple('LogFile', 'path, creation_time, size')
-        self.logfile_list = []
+    Helps to manage log files in a log folder.
 
-    def get_list(self):
+    Checks size of logs, cleans the log folder if there are to many logs,
+    makes list of log files with their path, size and date and time of creation
+    """
+
+    def __init__(self) -> None:
+        self.log: Logger = log
+        self.log_folder: str = './log'
+        self.logfile_list: List[LogFile] = self.get_list()
+
+    def get_list(self) -> List[LogFile]:
         """
-        Looks in the log folder and count every log file, add them all to
-        a list
+        Counts every log file in the log folder, add them all to a list
+
         :return: a list of named tuples where each represents one
         log file with its properties. Sorted by the time of creation of each
         log file - the oldest is the 0th in the list and the newest is [-1]
         """
 
         logfile_list = []
-        # Get name and creation time of every logfile
+
+        # Get the path, the name and creation time of every log file
         for root, subfolders, logfiles in os.walk(self.log_folder):
             if not logfiles:
                 return []
@@ -114,65 +128,64 @@ class LogFiles:
                 # Covert string with date and time to timestamp
                 creation_time = time.mktime(
                     dt.strptime(date_from_filename,
-                                      '%Y-%m-%d__%Hh%Mm').timetuple())
+                                '%Y-%m-%d__%Hh%Mm').timetuple())
                 path_to_logfile = os.path.join(root, logfile)
-                size_of_log = os.path.getsize(path_to_logfile)
+                size_of_log = os.path.getsize(path_to_logfile) / 1024**2
 
                 logfile_list.append(
-                    self.LogFile(path=path_to_logfile,
-                                 creation_time=creation_time,
-                                 size=size_of_log))
+                    LogFile(path=path_to_logfile,
+                            creation_time=creation_time,
+                            size=size_of_log))
 
-            return sorted(logfile_list, key=lambda x: x.creation_time)
+            self.logfile_list = sorted(logfile_list,
+                                       key=lambda x: x.creation_time)
+            return self.logfile_list
 
-    def _count_total_size(self):
+    def _count_total_size(self) -> float:
         """
-        Counts size of all log files in the log folder
+        Sums up size of all the log files in the log folder
+
         :return: total size of all log files as a float
         """
-        logfile_list = self.get_list()
         total_size = 0
-        if logfile_list:
-            for file in logfile_list:
+        if self.logfile_list:
+            for file in self.logfile_list:
                 total_size += file.size
 
-        return total_size / 1024**2
+        return total_size
 
-    def clean_log_folder(self, max_size):
+    def clean_log_folder(self, max_size: int) -> None:
         """
         Remove the oldest log files from the log folder when the
         size of the folder is more than max_size.
 
         Script takes creation time of file not from its properties (get.cwd()),
         but from it's name, because you cannot rely on
-        properties in case if log file was copied by
+        properties in case if a log file was copied by
         for example Yandex.Disk, because then creation time is
         time of copying this file from another machine
+
         :param max_size: integer that represents threshold after which this
         function will start to delete old log files
         :return: None
         """
 
-        logfile_list = self.get_list()
         total_size = self._count_total_size()
         while total_size > max_size:
             # if folder with log files weighs more than max_size in megabytes -
             # recursively remove the oldest one one by one
-            logfile_to_delete = logfile_list[1]
+            logfile_to_delete = self.logfile_list[1]
 
-            self.log.info('Removing old log file: %s',
-                          logfile_to_delete.path)
+            self.log.info('Removing old log file: %s', logfile_to_delete.path)
 
             # remove file from disk
             send2trash.send2trash(logfile_to_delete.path)
             # remove item from the list and subtract it's size from the
             # total size
             total_size -= logfile_to_delete.size
-            logfile_list.remove(logfile_to_delete)
+            self.logfile_list.remove(logfile_to_delete)
 
-        self.logfile_list = self.get_list()
-
-    def __str__(self):
+    def __str__(self) -> str:
         return (f'{self.__class__.__name__} instance. Log folder is '
                 f'"{self.log_folder}". Now it handles {len(self.get_list())} '
                 f'files with total size of {self._count_total_size():.2f} MB.')
