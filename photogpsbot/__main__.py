@@ -9,7 +9,6 @@ interactive menus, to handle user language, to process user images
 """
 
 
-# todo update docstrings and comments
 from io import BytesIO
 from datetime import datetime, timedelta
 from dataclasses import dataclass
