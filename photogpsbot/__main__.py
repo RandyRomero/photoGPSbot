@@ -375,6 +375,8 @@ def get_admin_stat(command: str) -> str:
                             60, td.seconds % 60)
         log.info(uptime)
         return uptime
+    else:
+        return 'There is no such a command'
 
 
 @bot.message_handler(commands=['start'])

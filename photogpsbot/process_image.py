@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Tuple, List
+from io import BytesIO
+from typing import Optional
 
 import exifread  # type: ignore
 from exifread.classes import IfdTag  # type: ignore
@@ -40,11 +42,11 @@ class ImageData:
     A class to store info about a photo from a user.
     """
     user: User
-    date_time: str = ''
-    camera: str = ''
-    lens: str = ''
-    address: str = ''
-    country: Dict[str, str] = field(default_factory=dict)
+    date_time: Optional[str] = None
+    camera: Optional[str] = None
+    lens: Optional[str] = None
+    address: Optional[Dict[str, str]] = None
+    country: Optional[Dict[str, str]] = None
     latitude: float = 0
     longitude: float = 0
 
@@ -55,27 +57,27 @@ class RawImageData:
     Raw data from photo that is still have to be converted in order to be used.
     """
     user: User
-    date_time: str = ''
-    camera_brand: str = ''
-    camera_model: str = ''
-    lens_brand: str = ''
-    lens_model: str = ''
-    latitude_reference: str = ''
-    raw_latitude: IfdTag = ''
-    longitude_reference: str = ''
-    raw_longitude: IfdTag = ''
+    date_time: Optional[str] = None
+    camera_brand: Optional[str] = None
+    camera_model: Optional[str] = None
+    lens_brand: Optional[str] = None
+    lens_model: Optional[str] = None
+    latitude_reference: Optional[str] = None
+    raw_latitude: Optional[IfdTag] = None
+    longitude_reference: Optional[str] = None
+    raw_longitude: Optional[IfdTag] = None
 
 
 class ImageHandler:
 
-    def __init__(self, user, file):
+    def __init__(self, user: User, file: BytesIO) -> None:
         self.user = user
         self.file = file
-        self.raw_data = None
 
-    @staticmethod
-    def _get_raw_data(file):
+    def _get_raw_data(self, file: BytesIO) -> RawImageData:
         """
+        Gets raw information out of an image
+
         Get name of the camera and lens, the date when the photo was taken
         and raw coordinates (which later will be converted)
         :param file: byte sting with an image
@@ -117,18 +119,20 @@ class ImageHandler:
         except (KeyError, AttributeError):
             log.info("This picture doesn't contain coordinates.")
             # returning info about the photo without coordinates
-            return (date_time, camera_brand, camera_model,
-                    lens_brand, lens_model)
+            return RawImageData(self.user, date_time, camera_brand,
+                                camera_model, lens_brand, lens_model)
         else:
             # returning info about the photo with its coordinates
-            return (date_time, camera_brand, camera_model,
-                    lens_brand, lens_model, latitude_reference, raw_latitude,
-                    longitude_reference, raw_longitude)
+            return RawImageData(self.user, date_time, camera_brand,
+                                camera_model, lens_brand, lens_model,
+                                latitude_reference, raw_latitude,
+                                longitude_reference, raw_longitude)
 
     @staticmethod
-    def _dedupe_string(string):
+    def _dedupe_string(string: str) -> str:
         """
         Get rid of all repetitive words in a string
+
         :param string: string with camera or lens names
         :return: same string without repetitive words
         """
@@ -141,14 +145,16 @@ class ImageHandler:
         return deduped_string.rstrip()
 
     @staticmethod
-    def _check_camera_tags(tags):
+    def _check_camera_tags(*tags: str) -> List[str]:
         """
-        Function that convert stupid code name of a smartphone or camera
-        from EXIF to meaningful one by looking a collation in a special MySQL
+        Converts camera and lens name to proper ones
+
+        Function that convert stupid code name of a smartphone or a camera
+        from EXIF to a meaningful one by looking a collation in a special MySQL
         table For example instead of just Nikon there can be
         NIKON CORPORATION in EXIF
 
-        :param tags: name of a camera and lens from EXIF
+        :param tags: a tuple with a name of a camera and lens from EXIF
         :return: list with one or two strings which are name of
         camera and/or lens. If there is not better name for the gadget
         in database, function just returns name how it is
@@ -177,18 +183,21 @@ class ImageHandler:
         return checked_tags
 
     @staticmethod
-    def _get_dd_coordinate(angular_distance, reference):
+    def _get_dd_coordinate(angular_distance: IfdTag,
+                           reference: Optional[str]) -> float:
         """
-         Convert coordinates from format in which they are typically written
-         in EXIF to decimal degrees - format that Telegram or Google Map
-         understand. Google coordinates, EXIF and decimals degrees if you
-         need to understand what is going on here
+        Converts one coordinate to the common format
 
-         :param angular_distance: ifdTag object from the exifread module -
-         it contains a raw coordinate - either longitude or latitude
-         :param reference:
-          :return: a coordinate in decimal degrees format
-         """
+        Convert coordinates from format in which they are typically written
+        in EXIF to decimal degrees - format that Telegram and Google Map
+        understand. Google coordinates, EXIF and decimals degrees if you
+        need to understand what is going on here
+
+        :param angular_distance: ifdTag object from the exifread module -
+        it contains a raw coordinate - either longitude or latitude
+        :param reference: to what half of Earth a coordinates belongs to
+        :return: a coordinate in decimal degrees format
+        """
         ag = angular_distance
         degrees = ag.values[0].num / ag.values[0].den
         minutes = (ag.values[1].num / ag.values[1].den) / 60
@@ -199,19 +208,18 @@ class ImageHandler:
 
         return degrees + minutes + seconds
 
-    def _convert_coordinates(self, raw_data):
+    def _convert_coordinates(self, raw_data: RawImageData) -> Tuple[float,
+                                                                    float]:
         """
-        # Convert GPS coordinates from format in which they are stored in
+        Converts coordinates to the common format
+
+        Convert GPS coordinates from format in which they are stored in
         EXIF of photo to format that accepts Telegram (and Google Maps for
         example)
 
-        :param data: EXIF data extracted from photo
-        :param chat_id: user id
-        :return: either floats that represents longitude and latitude or
-        string with error message dedicated to user
+        :param raw_data: info about an image with its coordinates
+        :return: tuple of floats that represents longitude and latitude
         """
-
-        # Return positive or negative longitude/latitude from exifread's ifdtag
 
         try:
             latitude = self._get_dd_coordinate(raw_data.raw_latitude,
@@ -238,13 +246,15 @@ class ImageHandler:
 
         return latitude, longitude
 
-    def _get_address(self, latitude, longitude):
+    def _get_address(self, latitude: float, longitude: float) \
+            -> Tuple[Dict[str, str], Dict[str, str]]:
 
         """
          # Get address as a string by coordinates from photo that user sent
          to bot
-        :param latitude:
-        :param longitude:
+
+        :param latitude: latitude from a photo as a float
+        :param longitude: longitude rom a photo as a float
         :return: address as a string where photo was taken; name of
         country in English and Russian to keep statistics
         of the most popular countries among users of the bot
@@ -275,7 +285,14 @@ class ImageHandler:
             log.error('Getting address has failed!')
             raise
 
-    def _convert_data(self, raw_data):
+    def _convert_data(self, raw_data: RawImageData) -> ImageData:
+        """
+        Cleans data from a picture that a user sends
+
+        :param raw_data: object with raw info about a picture
+        :return: object with formatted info about a picture
+        """
+
         date_time = (str(raw_data.date_time) if raw_data.date_time else None)
 
         # Merge a brand and model together
@@ -286,7 +303,7 @@ class ImageHandler:
         camera = (self._dedupe_string(camera) if camera != ' ' else None)
         lens = (self._dedupe_string(lens) if lens != ' ' else None)
 
-        camera, lens = self._check_camera_tags([camera, lens])
+        camera, lens = self._check_camera_tags(camera, lens)
 
         try:
             latitude, longitude = self._convert_coordinates(raw_data)
@@ -299,14 +316,17 @@ class ImageHandler:
                 log.warning(e)
                 address = country = None
 
-        return date_time, camera, lens, address, country, latitude, longitude
+        return ImageData(self.user, date_time, camera, lens, address, country,
+                         latitude, longitude)
 
-    def get_image_info(self):
+    def get_image_info(self) -> ImageData:
         """
         Read data from photo and prepare answer for user
         with location and etc.
+
+        :return: object with formatted info about a picture
         """
-        raw_data = RawImageData(self.user, *self._get_raw_data(self.file))
-        image_data = ImageData(self.user, *self._convert_data(raw_data))
+        raw_data = self._get_raw_data(self.file)
+        image_data = self._convert_data(raw_data)
 
         return image_data

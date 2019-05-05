@@ -8,11 +8,13 @@ https://help.pythonanywhere.com/pages/ManagingDatabaseConnections/
 """
 
 import socket
-from typing import Tuple, Any
+from typing import Optional
 
 # goes as mysqlclient in requirements
 import MySQLdb  # type: ignore
+from MySQLdb.connections import Connection  # type: ignore
 import sshtunnel  # type: ignore
+from sshtunnel import SSHTunnelForwarder  # type: ignore
 
 from photogpsbot import log
 import config
@@ -33,9 +35,9 @@ class Database:
     It provides methods to execute queries and handles connection to
     a MySQL database directly and via ssh if necessary
     """
-    conn = None
-    tunnel = None
-    tunnel_opened = False
+    conn: Optional[Connection] = None
+    tunnel: Optional[SSHTunnelForwarder] = None
+    tunnel_opened: bool = False
 
     def _open_ssh_tunnel(self) -> None:
         """
@@ -86,7 +88,7 @@ class Database:
                                     charset='utf8')
         log.info('Connected to the database.')
 
-    def execute_query(self, query: str, parameters: Tuple[Any] = None,
+    def execute_query(self, query: str, parameters: tuple = None,
                       trials: int = 0):
         """
         Executes a given query
@@ -134,7 +136,7 @@ class Database:
         else:
             return cursor
 
-    def add(self, query: str, parameters: Tuple[Any] = None):
+    def add(self, query: str, parameters: tuple = None):
         """
         Shortcut to add something to a database
 
@@ -147,7 +149,7 @@ class Database:
             self.execute_query(query, parameters)
             self.conn.commit()
         except Exception as e:
-            log.errror(e)
+            log.error(e)
             raise DatabaseError("Cannot add your data to the database!")
 
     def disconnect(self) -> bool:

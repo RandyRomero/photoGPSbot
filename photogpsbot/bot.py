@@ -7,6 +7,7 @@ import requests
 import time
 from datetime import datetime
 import sys
+from typing import Optional
 
 # goes as pyTelegramBotAPI in requirements
 import telebot  # type: ignore
@@ -21,11 +22,13 @@ class TelegramBot(telebot.TeleBot):
     case of errors for example
     """
 
-    def __init__(self, token: str, threaded: bool = True,
+    def __init__(self, token: str,
+                 threaded: bool = True,
                  skip_pending: bool = False,
                  num_threads: int = 2) -> None:
+
         super().__init__(token, threaded, skip_pending, num_threads)
-        self.start_time = None
+        self.start_time: Optional[datetime] = None
 
     def _run(self) -> None:
         """
