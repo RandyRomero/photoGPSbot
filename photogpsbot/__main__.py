@@ -226,6 +226,7 @@ class PhotoMessage:
 def get_admin_stat(command: str) -> str:
     """
     Function that returns statistics to admin by command
+
     :param command: string with a command what kind of statistics to prepare
     :return: a string with either answer with statistics or an error message
     """
@@ -382,7 +383,7 @@ def get_admin_stat(command: str) -> str:
 @bot.message_handler(commands=['start'])
 def create_main_keyboard(message: Message) -> None:
     """
-    Creates and renders a main keyboard
+    Creates and renders the main keyboard
 
     :param message: message from a user
     :return: None
@@ -705,6 +706,13 @@ def handle_message_with_image(message: Message) -> None:
 
 
 def main() -> None:
+    """
+    The entry point of this bot.
+
+    Cleans log if needed, caches users models, connects to the databases,
+    starts the bot.
+    :return: None
+    """
     log_files.clean_log_folder(1)
     users.cache(100)
     db.connect()
