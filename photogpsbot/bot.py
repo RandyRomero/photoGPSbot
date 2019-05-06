@@ -1,5 +1,5 @@
 """
-Use this module to get bot to work and communicate with Telegram servers
+Use this module to get the bot to work and communicate with Telegram servers
 """
 
 
@@ -7,9 +7,10 @@ import requests
 import time
 from datetime import datetime
 import sys
+from typing import Optional
 
 # goes as pyTelegramBotAPI in requirements
-import telebot
+import telebot  # type: ignore
 
 import config
 from photogpsbot import log
@@ -21,25 +22,32 @@ class TelegramBot(telebot.TeleBot):
     case of errors for example
     """
 
-    def __init__(self, token, threaded=True, skip_pending=False,
-                 num_threads=2):
-        super().__init__(token, threaded, skip_pending, num_threads)
-        self.start_time = None
+    def __init__(self, token: str,
+                 threaded: bool = True,
+                 skip_pending: bool = False,
+                 num_threads: int = 2) -> None:
 
-    def _run(self):
+        super().__init__(token, threaded, skip_pending, num_threads)
+        self.start_time: Optional[datetime] = None
+
+    def _run(self) -> None:
         """
         Make bot start polling
+
         :return: None
         """
         log.info('Starting photogpsbot...')
         # Keep bot receiving messages
         self.polling(none_stop=True, timeout=90)
 
-    def start_bot(self):
+    def start_bot(self) -> None:
         """
+        Method to get the bot started
+
         Wrapper around self._run just for the sake of making it more reliable
         and reconnect in case of errors. And to store time when bot started to
         work
+
         :return: None
         """
         try:
@@ -54,9 +62,10 @@ class TelegramBot(telebot.TeleBot):
             log.warning('Try to start the bot again...')
             self._run()
 
-    def turn_off(self):
+    def turn_off(self) -> None:
         """
         Safely turn the bot off and message to its admin
+
         :return: None
         """
 
@@ -66,7 +75,7 @@ class TelegramBot(telebot.TeleBot):
         log.info('Auf Wiedersehen! Bot is turned off.')
         sys.exit()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return ('Instance of a Telegram bot. '
                 f'Started connection '
                 f'at {self.start_time.strftime("%Y-%m-%d %H:%M:%S")}.')

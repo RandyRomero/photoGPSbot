@@ -25,5 +25,5 @@ The bot also has special admin menu to show different statistics, but it is hidd
 
 P.S. You need send photo as a file in order not to lose EXIF.
 
-It is written with Python 3.6, uses [eternnoir/pyTelegramBotAPI](https://github.com/eternnoir/pyTelegramBotAPI)
+It is written with Python 3.7, uses [eternnoir/pyTelegramBotAPI](https://github.com/eternnoir/pyTelegramBotAPI)
 and a couple of MySQL tables.
